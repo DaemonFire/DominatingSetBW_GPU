@@ -9,7 +9,34 @@
 #include <sys/types.h>
 #include <errno.h>
 #include <sys/stat.h>
-#define MAT(mat,x,y,n) (mat[x*n+y])
+#include <pthread.h>
+
+int nnodes;
+dectree** nodestocompute;
+int tocompute;
+pthread_mutex_t mut;
+graph* gwork;
+
+int fillThevoid (dectree* t, graph* g){
+	gwork=g;
+	t->computed=0;
+	nodestocompute[tocompute]=t;
+	tocompute++;
+	if (t->left!=NULL)
+		fillThevoid(t->left, g);
+	if (t->right!=NULL)
+		fillThevoid(t->right, g);
+	return EXIT_SUCCESS;
+}
+
+int getnumberofnodes(dectree* t){
+	int n=1;
+	if (t->left!=NULL)
+		n+=getnumberofnodes(t->left);
+	if (t->right!=NULL)
+		n+=getnumberofnodes(t->right);
+	return n;
+}
 
 __global__
 void computeTwins (int* mat, int* width, int* result){
@@ -20,7 +47,8 @@ void computeTwins (int* mat, int* width, int* result){
 	}
 	if (twin==1)
 		result[threadIdx.x*blockDim.x+blockIdx.x]=1;
-} 
+}
+
 __global__
 void computeRepresentatives(int* result, int* ptr){
 	for (int i=0; i<blockDim.x; i++){
@@ -286,15 +314,21 @@ int firstpreprocess(graph* g,  cutdata* c){
 	int* width;
 	int * result;
 
-	cudaMalloc((void**)mat, c->na*c->nacomp*sizeof(int));
-	cudaMalloc((void**)width, sizeof(int));
-	cudaMalloc((void**)result, c->na*c->na*sizeof(int));
+	cudaMalloc((void**)&mat, c->na*c->nacomp*sizeof(int));
+	cudaMalloc((void**)&width, sizeof(int));
+	cudaMalloc((void**)&result, c->na*c->na*sizeof(int));
 	
 	cudaMemcpy(result, res, c->na*c->na*sizeof(int), cudaMemcpyHostToDevice);
 	cudaMemcpy(mat, c->matrixrevisited, c->na*c->nacomp*sizeof(int), cudaMemcpyHostToDevice);
 	cudaMemcpy(width, &(c->nacomp), sizeof(int), cudaMemcpyHostToDevice);
 
 	computeTwins<<<c->na,c->na>>>(mat, width, result);
+
+	cudaMemcpy(res, result, c->na*c->na*sizeof(int), cudaMemcpyDeviceToHost);
+	printf("res= ");
+	for (int i=0; i<c->na*c->na; i++)
+		printf("%d, ",res[i]);
+	printf("\n");
 
 	c->pointtorep=(int*)malloc(2*c->na*sizeof(int));
 	c->pointtorepincomp=(int*)malloc(2*c->nacomp*sizeof(int));
@@ -309,42 +343,61 @@ int firstpreprocess(graph* g,  cutdata* c){
 
 	int* ptr;
 	
-	cudaMalloc((void**)ptr, 2*c->na*sizeof(int));
+	cudaMalloc((void**)&ptr, 2*c->na*sizeof(int));
 
 	cudaMemcpy(ptr, c->pointtorep, 2*c->na*sizeof(int), cudaMemcpyHostToDevice);
 
-	computeRepresentatives<<<1,c->nacomp>>>(result, ptr);	
+	computeRepresentatives<<<1,c->na>>>(result, ptr);	
+	
+	cudaMemcpy(c->pointtorep, ptr, 2*c->na*sizeof(int), cudaMemcpyDeviceToHost);
+	
+	for (int i =0; i<c->na; i++)
+		printf("%d, ", c->a[i]);
+	printf("\n");
 
-	cudaMemcpy(c->pointtorep, ptr, 2*c->nacomp*sizeof(int), cudaMemcpyDeviceToHost);
 
 	int* res2= (int*) malloc(c->nacomp*c->nacomp*sizeof(int));
 	int* result2;
 
+	int *reversedMatrix = (int*)malloc(c->na*c->nacomp*sizeof(int));
+	for (int i =0; i<c->na; i++){
+		for (int j=0; j<c->nacomp; j++){
+			reversedMatrix[j*c->na+i]=c->matrixrevisited[i*c->nacomp+j];
+		}
+	}
+
 	for (int i = 0; i< c-> nacomp*c->nacomp;i++)
 		res2[i]=0;
 
-	cudaMalloc((void**)result2, c->nacomp*c->nacomp*sizeof(int));
+	cudaMalloc((void**)&result2, c->nacomp*c->nacomp*sizeof(int));
 
 	cudaMemcpy(result2, res2, c->nacomp*c->nacomp*sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(mat, reversedMatrix, c->na*c->nacomp*sizeof(int), cudaMemcpyHostToDevice);
 	cudaMemcpy(width, &(c->na), sizeof(int), cudaMemcpyHostToDevice);
 
 	computeTwins<<<c->nacomp,c->nacomp>>>(mat, width, result2);
 
 	int* ptr2;
 
-	cudaMalloc((void**)ptr2, 2*c->nacomp*sizeof(int));
+	cudaMalloc((void**)&ptr2, 2*c->nacomp*sizeof(int));
 
 	cudaMemcpy(ptr2, c->pointtorepincomp, 2*c->nacomp*sizeof(int), cudaMemcpyHostToDevice);
 
 	computeRepresentatives<<<1,c->nacomp>>>(result2, ptr2);
 
 	cudaMemcpy(c->pointtorepincomp, ptr2, 2*c->nacomp*sizeof(int), cudaMemcpyDeviceToHost);
-	
+		
 	for (int i = 0; i< 2*c->na; i++)
 		c->pointtorep[i]=c->a[c->pointtorep[i]];
 	for (int i = 0; i< 2*c->nacomp; i++)
 		c->pointtorepincomp[i]=c->acomp[c->pointtorepincomp[i]];
-		
+
+	for (int i = 0; i<c->na; i++)
+		printf("%d->%d\n",c->pointtorep[2*i], c->pointtorep[2*i+1]);
+
+	for (int i = 0; i<c->nacomp; i++)
+		printf("%d->%d\n",c->pointtorepincomp[2*i], c->pointtorepincomp[2*i+1]);
+
 	c->tc=(int*)malloc(c->na*sizeof(int));
 	for (int i=0;i<c->na;i++)
 		c->tc[i]=-1;
@@ -435,15 +488,15 @@ int secondpreprocess (cutdata* c, graph* g){
 		int* rep;
 		int* repc;
 
-		cudaMalloc((void**)lc, sizeoflast*c->nrep*c->nrep*sizeof(int));
-		cudaMalloc((void**)rc, sizeoflast*c->nrep*c->nrepincomp*sizeof(int));
-		cudaMalloc((void**)lrc, c->lracard*c->nrep*sizeof(int));
-		cudaMalloc((void**)mat, c->na * c-> nacomp * sizeof(int));
-		cudaMalloc((void**)lrcard, sizeof(int));
-		cudaMalloc((void**)width, sizeof(int));
-		cudaMalloc((void**)na, sizeof(int));
-		cudaMalloc((void**)rep, c->nrep*sizeof(int));
-		cudaMalloc((void**)repc, c->nrepincomp*sizeof(int));
+		cudaMalloc((void**)&lc, sizeoflast*c->nrep*c->nrep*sizeof(int));
+		cudaMalloc((void**)&rc, sizeoflast*c->nrep*c->nrepincomp*sizeof(int));
+		cudaMalloc((void**)&lrc, c->lracard*c->nrep*sizeof(int));
+		cudaMalloc((void**)&mat, c->na * c-> nacomp * sizeof(int));
+		cudaMalloc((void**)&lrcard, sizeof(int));
+		cudaMalloc((void**)&width, sizeof(int));
+		cudaMalloc((void**)&na, sizeof(int));
+		cudaMalloc((void**)&rep, c->nrep*sizeof(int));
+		cudaMalloc((void**)&repc, c->nrepincomp*sizeof(int));
 
 		cudaMemcpy(lc, l, sizeoflast*c->nrep*c->nrep*sizeof(int), cudaMemcpyHostToDevice);
 		cudaMemcpy(rc, r, sizeoflast*c->nrep*c->nrepincomp*sizeof(int), cudaMemcpyHostToDevice);
@@ -553,15 +606,15 @@ int secondpreprocess (cutdata* c, graph* g){
 			}
 		}
 
-		cudaMalloc((void**)lc, sizeoflast*c->nrepincomp*c->nrepincomp*sizeof(int));
-		cudaMalloc((void**)rc, sizeoflast*c->nrepincomp*c->nrep*sizeof(int));
-		cudaMalloc((void**)lrc, c->lracompcard*c->nrepincomp*sizeof(int));
-		cudaMalloc((void**)mat, c->nacomp * c-> na * sizeof(int));
-		cudaMalloc((void**)lrcard, sizeof(int));
-		cudaMalloc((void**)width, sizeof(int));
-		cudaMalloc((void**)na, sizeof(int));
-		cudaMalloc((void**)rep, c->nrepincomp*sizeof(int));
-		cudaMalloc((void**)repc, c->nrep*sizeof(int));
+		cudaMalloc((void**)&lc, sizeoflast*c->nrepincomp*c->nrepincomp*sizeof(int));
+		cudaMalloc((void**)&rc, sizeoflast*c->nrepincomp*c->nrep*sizeof(int));
+		cudaMalloc((void**)&lrc, c->lracompcard*c->nrepincomp*sizeof(int));
+		cudaMalloc((void**)&mat, c->nacomp * c-> na * sizeof(int));
+		cudaMalloc((void**)&lrcard, sizeof(int));
+		cudaMalloc((void**)&width, sizeof(int));
+		cudaMalloc((void**)&na, sizeof(int));
+		cudaMalloc((void**)&rep, c->nrepincomp*sizeof(int));
+		cudaMalloc((void**)&repc, c->nrep*sizeof(int));
 
 		cudaMemcpy(lc, l, sizeoflast*c->nrepincomp*c->nrepincomp*sizeof(int), cudaMemcpyHostToDevice);
 		cudaMemcpy(rc, r, sizeoflast*c->nrep*c->nrepincomp*sizeof(int), cudaMemcpyHostToDevice);
@@ -643,17 +696,17 @@ int thirdpreprocess (cutdata* c, graph* g){
 	int* width;
 	int* r;
 
-	cudaMalloc((void**)lr, c->lracard*c->nrep*sizeof(int));
-	cudaMalloc((void**)ln, c->lnracard*c->nrepincomp*sizeof(int));
-	cudaMalloc((void**)lrcard, sizeof(int));
-	cudaMalloc((void**)tc, c->nrep*sizeof(int));
-	cudaMalloc((void**)mg, c->lracard*c->nrep*sizeof(int));
-	cudaMalloc((void**)mat, c->na*c->nacomp*sizeof(int));
-	cudaMalloc((void**)na, sizeof(int));
-	cudaMalloc((void**)rep, c->nrep*sizeof(int));
-	cudaMalloc((void**)repc, c->nrepincomp*sizeof(int));
-	cudaMalloc((void**)width, sizeof(int));	
-	cudaMalloc((void**)r, c->nrepincomp*sizeof(int));
+	cudaMalloc((void**)&lr, c->lracard*c->nrep*sizeof(int));
+	cudaMalloc((void**)&ln, c->lnracard*c->nrepincomp*sizeof(int));
+	cudaMalloc((void**)&lrcard, sizeof(int));
+	cudaMalloc((void**)&tc, c->nrep*sizeof(int));
+	cudaMalloc((void**)&mg, c->lracard*c->nrep*sizeof(int));
+	cudaMalloc((void**)&mat, c->na*c->nacomp*sizeof(int));
+	cudaMalloc((void**)&na, sizeof(int));
+	cudaMalloc((void**)&rep, c->nrep*sizeof(int));
+	cudaMalloc((void**)&repc, c->nrepincomp*sizeof(int));
+	cudaMalloc((void**)&width, sizeof(int));	
+	cudaMalloc((void**)&r, c->nrepincomp*sizeof(int));
 
 	cudaMemcpy(lr, c->lra, c->lracard*c->nrep*sizeof(int), cudaMemcpyHostToDevice);
 	cudaMemcpy(ln, c->lnra, c->lnracard*c->nrepincomp*sizeof(int), cudaMemcpyHostToDevice);
@@ -672,17 +725,17 @@ int thirdpreprocess (cutdata* c, graph* g){
 
 	c->mcomp=(int*)malloc(c->lracompcard*c->nrepincomp*sizeof(int));
 
-	cudaMalloc((void**)lr, c->lracompcard*c->nrepincomp*sizeof(int));
-	cudaMalloc((void**)ln, c->lnracompcard*c->nrep*sizeof(int));
-	cudaMalloc((void**)lrcard, sizeof(int));
-	cudaMalloc((void**)tc, c->nrepincomp*sizeof(int));
-	cudaMalloc((void**)mg, c->lracompcard*c->nrepincomp*sizeof(int));
-	cudaMalloc((void**)mat, c->nacomp*c->na*sizeof(int));
-	cudaMalloc((void**)na, sizeof(int));
-	cudaMalloc((void**)rep, c->nrepincomp*sizeof(int));
-	cudaMalloc((void**)repc, c->nrep*sizeof(int));
-	cudaMalloc((void**)width, sizeof(int));
-	cudaMalloc((void**)r, c->nrep*sizeof(int));
+	cudaMalloc((void**)&lr, c->lracompcard*c->nrepincomp*sizeof(int));
+	cudaMalloc((void**)&ln, c->lnracompcard*c->nrep*sizeof(int));
+	cudaMalloc((void**)&lrcard, sizeof(int));
+	cudaMalloc((void**)&tc, c->nrepincomp*sizeof(int));
+	cudaMalloc((void**)&mg, c->lracompcard*c->nrepincomp*sizeof(int));
+	cudaMalloc((void**)&mat, c->nacomp*c->na*sizeof(int));
+	cudaMalloc((void**)&na, sizeof(int));
+	cudaMalloc((void**)&rep, c->nrepincomp*sizeof(int));
+	cudaMalloc((void**)&repc, c->nrep*sizeof(int));
+	cudaMalloc((void**)&width, sizeof(int));
+	cudaMalloc((void**)&r, c->nrep*sizeof(int));
 
 	int* reversedMatrix = (int*) malloc(c->na*c->nacomp*sizeof(int));
 	for (int i = 0; i<c->na; i++){
@@ -710,12 +763,47 @@ int thirdpreprocess (cutdata* c, graph* g){
 	return EXIT_SUCCESS;
 }
 
-int* toplevelalgorithm (dectree* t, graph* g){
+void *threadAlgorithm ( void *arg){
+	int i = *((int*)arg);
+	int j = i;
+	pthread_mutex_lock(&mut);
+	while (tocompute!=0){
+		if (nodestocompute[i]->computed==0){
+			printf("Thread %d computing %d\n", j, i);
+			nodestocompute[i]->computed=2;
+			pthread_mutex_unlock(&mut);
+			stepalgorithm(nodestocompute[i],gwork);
+		}
+		else{
+			printf("Thread %d: %d has already been computed\n", j, i);
+			pthread_mutex_unlock(&mut);
+		}
+		i=(i+1)%nnodes;
+		pthread_mutex_lock(&mut);
+	}
+	pthread_exit(NULL);
+}
+
+int* toplevelalgorithm (dectree* t, graph* g, int n){
 
 	if ((t->right==NULL)||(t->left==NULL)){
-		int* s;
-		return s;
+		return NULL;
 	}
+
+	nnodes=getnumberofnodes(t);
+	tocompute=0;
+	nodestocompute=(dectree**)malloc(nnodes*sizeof(dectree*));
+	fillThevoid(t,g);
+	
+	for (int i=0; i<n; i++){
+		pthread_t thread;
+		if (pthread_create(&thread, NULL, threadAlgorithm, &i)){
+			perror("pthread_create");
+			return NULL;
+		}
+	}
+	
+
 	cutdata *c = (cutdata*)malloc(2*sizeof(cutdata));
 	stepalgorithm(t->left,g);
 	stepalgorithm(t->right,g);
@@ -830,7 +918,7 @@ int* toplevelalgorithm (dectree* t, graph* g){
 
 
 int stepalgorithm (dectree* t, graph* g){
-
+	
 	if ((t->right==NULL)||(t->left==NULL)){
 		t->c = cutThatTree (g, t);
 		firstpreprocess (g,&(t->c));
@@ -841,6 +929,11 @@ int stepalgorithm (dectree* t, graph* g){
 		t->c.tab[1]=0;
 		t->c.tab[2]=1;
 		t->c.tab[3]=1;
+		t->computed=1;
+		pthread_mutex_lock(&mut);
+		tocompute--;
+		pthread_mutex_unlock(&mut);
+	
 	}
 
 	else {
@@ -893,33 +986,33 @@ int stepalgorithm (dectree* t, graph* g){
 			int* nbcomp;
 			int* nw;
 
-			cudaMalloc((void**)tabg, 5*t->right->c.lracard*t->left->c.lracard*t->c.lracompcard*sizeof(int)); 
-			cudaMalloc((void**)lra, t->left->c.lracard*t->left->c.nrep*sizeof(int)); 
-			cudaMalloc((void**)lrb, t->right->c.lracard*t->right->c.nrep*sizeof(int));
-			cudaMalloc((void**)lrw, t->c.lracompcard*t->c.nrepincomp*sizeof(int));
-			cudaMalloc((void**)lracard, sizeof(int));
-			cudaMalloc((void**)lrbcard, sizeof(int));
-			cudaMalloc((void**)lrwcard, sizeof(int));
-			cudaMalloc((void**)lnracard, sizeof(int));
-			cudaMalloc((void**)lnrbcard, sizeof(int));
-			cudaMalloc((void**)lnrwcard, sizeof(int));
-			cudaMalloc((void**)mw, t->c.lracard*t->c.nrep*sizeof(int));
-			cudaMalloc((void**)macomp, t->left->c.lracompcard*t->left->c.nrepincomp*sizeof(int));
-			cudaMalloc((void**)mbcomp, t->right->c.lracompcard*t->right->c.nrepincomp*sizeof(int));
-			cudaMalloc((void**)nrepa, sizeof(int));	
-			cudaMalloc((void**)nrepb, sizeof(int));
-			cudaMalloc((void**)nrepw, sizeof(int));
-			cudaMalloc((void**)repacomp, t->left->c.nrepincomp*sizeof(int));
-			cudaMalloc((void**)repbcomp, t->right->c.nrepincomp*sizeof(int));
-			cudaMalloc((void**)repw, t->c.nrep*sizeof(int));
-			cudaMalloc((void**)taba, t->left->c.lracard*t->left->c.lracompcard*sizeof(int));
-			cudaMalloc((void**)tabb, t->right->c.lracard*t->right->c.lracompcard*sizeof(int));
-			cudaMalloc((void**)ptrac, 2*t->left->c.nacomp*sizeof(int));
-			cudaMalloc((void**)ptrbc, 2*t->right->c.nacomp*sizeof(int));
-			cudaMalloc((void**)ptrw, 2*t->c.na*sizeof(int));
-			cudaMalloc((void**)nacomp, sizeof(int));
-			cudaMalloc((void**)nbcomp, sizeof(int));
-			cudaMalloc((void**)nw, sizeof(int));
+			cudaMalloc((void**)&tabg, 5*t->right->c.lracard*t->left->c.lracard*t->c.lracompcard*sizeof(int)); 
+			cudaMalloc((void**)&lra, t->left->c.lracard*t->left->c.nrep*sizeof(int)); 
+			cudaMalloc((void**)&lrb, t->right->c.lracard*t->right->c.nrep*sizeof(int));
+			cudaMalloc((void**)&lrw, t->c.lracompcard*t->c.nrepincomp*sizeof(int));
+			cudaMalloc((void**)&lracard, sizeof(int));
+			cudaMalloc((void**)&lrbcard, sizeof(int));
+			cudaMalloc((void**)&lrwcard, sizeof(int));
+			cudaMalloc((void**)&lnracard, sizeof(int));
+			cudaMalloc((void**)&lnrbcard, sizeof(int));
+			cudaMalloc((void**)&lnrwcard, sizeof(int));
+			cudaMalloc((void**)&mw, t->c.lracard*t->c.nrep*sizeof(int));
+			cudaMalloc((void**)&macomp, t->left->c.lracompcard*t->left->c.nrepincomp*sizeof(int));
+			cudaMalloc((void**)&mbcomp, t->right->c.lracompcard*t->right->c.nrepincomp*sizeof(int));
+			cudaMalloc((void**)&nrepa, sizeof(int));	
+			cudaMalloc((void**)&nrepb, sizeof(int));
+			cudaMalloc((void**)&nrepw, sizeof(int));
+			cudaMalloc((void**)&repacomp, t->left->c.nrepincomp*sizeof(int));
+			cudaMalloc((void**)&repbcomp, t->right->c.nrepincomp*sizeof(int));
+			cudaMalloc((void**)&repw, t->c.nrep*sizeof(int));
+			cudaMalloc((void**)&taba, t->left->c.lracard*t->left->c.lracompcard*sizeof(int));
+			cudaMalloc((void**)&tabb, t->right->c.lracard*t->right->c.lracompcard*sizeof(int));
+			cudaMalloc((void**)&ptrac, 2*t->left->c.nacomp*sizeof(int));
+			cudaMalloc((void**)&ptrbc, 2*t->right->c.nacomp*sizeof(int));
+			cudaMalloc((void**)&ptrw, 2*t->c.na*sizeof(int));
+			cudaMalloc((void**)&nacomp, sizeof(int));
+			cudaMalloc((void**)&nbcomp, sizeof(int));
+			cudaMalloc((void**)&nw, sizeof(int));
 
 			cudaMemcpy(tabg, tmptab, 5*t->right->c.lracard*t->left->c.lracard*t->c.lracompcard*sizeof(int), cudaMemcpyHostToDevice);
 			cudaMemcpy(lra, t->left->c.lra, t->left->c.lracard*t->left->c.nrep*sizeof(int), cudaMemcpyHostToDevice);
@@ -978,8 +1071,15 @@ int stepalgorithm (dectree* t, graph* g){
 						}
 					}
 				}
+				t->computed=1;
+				pthread_mutex_lock(&mut);
+				tocompute--;
+				pthread_mutex_unlock(&mut);
 			}
-		}		
+		}	
+		else {
+			t->computed=0;
+		}	
 	}
 
 	return EXIT_SUCCESS;

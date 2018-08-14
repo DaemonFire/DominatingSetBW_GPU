@@ -25,7 +25,7 @@ int secondpreprocess (cutdata* c, graph* g);
 
 int thirdpreprocess (cutdata* c, graph* g);
 
-int* toplevelalgorithm (dectree* t, graph* g);
+int* toplevelalgorithm (dectree* t, graph* g, int n);
 
 int stepalgorithm (dectree* t, graph* g);
 

@@ -48,7 +48,8 @@ int main (int argc, char** argv){
 	graph* l;
 	l=(graph*)malloc(sizeof(graph));
 	*l=g;
-	int* x = toplevelalgorithm (t, l);
+	
+	int* x = toplevelalgorithm (t, l, g.size);
 	gettimeofday(&stop, NULL);
 
 

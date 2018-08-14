@@ -446,4 +446,5 @@ int printTree (dectree t){
 		}
 	}
 	printf("\n");
+	return EXIT_SUCCESS;
 }
