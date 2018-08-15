@@ -68,21 +68,21 @@ void computeNeighboorhoods(int* lc, int* rc, int* lrc, int* lrcard, int* mat, in
 	for (int i = 0; i<*width; i++){
 		int isin = 0;
 		for (int j = 0 ; j<blockDim.x; j++){
-			if ((lc[blockIdx.x*threadIdx.x*blockDim.x+j]==1)&&(mat[rep[j]*(*na)+repc[i]]==1)){
+			if ((lc[(blockIdx.x*blockDim.x+threadIdx.x)*blockDim.x+j]==1)&&(mat[j*(*na)+i]==1)){
 				isin=1;
 				break;
 			}
 		}
 		if (isin==1)
-			rc[blockIdx.x*threadIdx.x*(*width)+i]=1;
+			rc[(blockIdx.x*(*width)+threadIdx.x)*(*width)+i]=1;
 		else
-			rc[blockIdx.x*threadIdx.x*(*width)+i]=0;
+			rc[(blockIdx.x*(*width)+threadIdx.x)*(*width)+i]=0;
 	}
 	int already=0;
 	for (int i=0; i<*lrcard; i++){
 		int id=1;
 		for (int j = 0; j<*width;j++){
-			if (rc[blockIdx.x*threadIdx.x*(*width)+repc[j]]!=lrc[i*(*width)+j]){
+			if (rc[(blockIdx.x*(*width)+threadIdx.x)*(*width)+j]!=lrc[i*(*width)+j]){
 				id=0;
 				break;
 			}
@@ -93,7 +93,7 @@ void computeNeighboorhoods(int* lc, int* rc, int* lrc, int* lrcard, int* mat, in
 		}
 	}
 	if (already==1)
-		rc[blockIdx.x*threadIdx.x*(*width)]=-1;
+		rc[(blockIdx.x*(*width)+threadIdx.x)*(*width)]=-1;
 }
 
 __global__
@@ -261,6 +261,13 @@ cutdata cutThatTree (graph* g, dectree* t){
 		for (int j=0;j<c.nacomp;j++)
 			c.matrixrevisited[i*c.nacomp+j]=g->matrix[c.a[i]*g->size+c.acomp[j]];
 	}
+		printf("M=\n");
+		for (int i =0; i<c.na; i++){
+			for (int j= 0; j<c.nacomp; j++){
+				printf("%d ", c.matrixrevisited[i*c.nacomp+j]);
+			}
+			printf("\n");
+		}
 	return c;
 }
 
@@ -325,10 +332,6 @@ int firstpreprocess(graph* g,  cutdata* c){
 	computeTwins<<<c->na,c->na>>>(mat, width, result);
 
 	cudaMemcpy(res, result, c->na*c->na*sizeof(int), cudaMemcpyDeviceToHost);
-	printf("res= ");
-	for (int i=0; i<c->na*c->na; i++)
-		printf("%d, ",res[i]);
-	printf("\n");
 
 	c->pointtorep=(int*)malloc(2*c->na*sizeof(int));
 	c->pointtorepincomp=(int*)malloc(2*c->nacomp*sizeof(int));
@@ -350,10 +353,6 @@ int firstpreprocess(graph* g,  cutdata* c){
 	computeRepresentatives<<<1,c->na>>>(result, ptr);	
 	
 	cudaMemcpy(c->pointtorep, ptr, 2*c->na*sizeof(int), cudaMemcpyDeviceToHost);
-	
-	for (int i =0; i<c->na; i++)
-		printf("%d, ", c->a[i]);
-	printf("\n");
 
 
 	int* res2= (int*) malloc(c->nacomp*c->nacomp*sizeof(int));
@@ -392,11 +391,7 @@ int firstpreprocess(graph* g,  cutdata* c){
 	for (int i = 0; i< 2*c->nacomp; i++)
 		c->pointtorepincomp[i]=c->acomp[c->pointtorepincomp[i]];
 
-	for (int i = 0; i<c->na; i++)
-		printf("%d->%d\n",c->pointtorep[2*i], c->pointtorep[2*i+1]);
 
-	for (int i = 0; i<c->nacomp; i++)
-		printf("%d->%d\n",c->pointtorepincomp[2*i], c->pointtorepincomp[2*i+1]);
 
 	c->tc=(int*)malloc(c->na*sizeof(int));
 	for (int i=0;i<c->na;i++)
@@ -472,9 +467,9 @@ int secondpreprocess (cutdata* c, graph* g){
 			for (int j = 0; j<c->nrep; j++) {
 				for (int k=0; k<c->nrep; k++){
 					if (k==c->tc[j])
-						l[i*j*c->nrep+k]=1;
+						l[(i*c->nrep+j)*c->nrep+k]=1;
 					else
-						l[i*j*c->nrep+k]=c->lra[lastLevel[i]*c->nrep+k];
+						l[(i*c->nrep+j)*c->nrep+k]=c->lra[lastLevel[i]*c->nrep+k];
 				}
 			}
 		}
@@ -490,7 +485,7 @@ int secondpreprocess (cutdata* c, graph* g){
 
 		cudaMalloc((void**)&lc, sizeoflast*c->nrep*c->nrep*sizeof(int));
 		cudaMalloc((void**)&rc, sizeoflast*c->nrep*c->nrepincomp*sizeof(int));
-		cudaMalloc((void**)&lrc, c->lracard*c->nrep*sizeof(int));
+		cudaMalloc((void**)&lrc, c->lnracard*c->nrepincomp*sizeof(int));
 		cudaMalloc((void**)&mat, c->na * c-> nacomp * sizeof(int));
 		cudaMalloc((void**)&lrcard, sizeof(int));
 		cudaMalloc((void**)&width, sizeof(int));
@@ -500,7 +495,7 @@ int secondpreprocess (cutdata* c, graph* g){
 
 		cudaMemcpy(lc, l, sizeoflast*c->nrep*c->nrep*sizeof(int), cudaMemcpyHostToDevice);
 		cudaMemcpy(rc, r, sizeoflast*c->nrep*c->nrepincomp*sizeof(int), cudaMemcpyHostToDevice);
-		cudaMemcpy(lrc, c->lra, c->lracard*c->nrep*sizeof(int), cudaMemcpyHostToDevice);
+		cudaMemcpy(lrc, c->lnra, c->lnracard*c->nrepincomp*sizeof(int), cudaMemcpyHostToDevice);
 		cudaMemcpy(lrcard, &(c->lracard), sizeof(int), cudaMemcpyHostToDevice);
 		cudaMemcpy(mat, c->matrixrevisited, c->na*c->nacomp*sizeof(int), cudaMemcpyHostToDevice);
 		cudaMemcpy(width, &(c->nrepincomp), sizeof(int), cudaMemcpyHostToDevice);
@@ -515,6 +510,15 @@ int secondpreprocess (cutdata* c, graph* g){
 		int *ltemp = (int*)malloc((c->lracard+sizeoflast*c->nrep)*c->nrep*sizeof(int));
 		int *lrtemp = (int*)malloc((c->lnracard+sizeoflast*c->nrep)*c->nrepincomp*sizeof(int));
 		nextLevel = (int*)malloc(sizeoflast*c->nrep*c->nrep*sizeof(int));
+/*
+		printf("l=\n");
+		for (int i =0; i< sizeoflast* c->nrep; i++){
+			for (int j = 0; j<c->nrep; j++){
+				printf("%d, ", l[i*c->nrep+j]);
+			}
+			printf("\n");
+		}
+*/
 
 		for (int i= 0; i< c->lracard*c->nrep;i++)
 			ltemp[i]=c->lra[i];
@@ -553,10 +557,13 @@ int secondpreprocess (cutdata* c, graph* g){
 		c->lnracard=c->lnracard+sizeofnext;
 		c->lra=ltemp;
 		c->lnra=lrtemp;
+
+
+
 		lastLevel=nextLevel;
 		sizeoflast=sizeofnext;
 	}
-
+	printf("comp\n");
 	c->lracomp = (int*) malloc (c->nrepincomp*sizeof(int));
 	c->lnracomp = (int*) malloc (c->nrep*sizeof(int));
 	c->lracompcard=1;
@@ -583,9 +590,9 @@ int secondpreprocess (cutdata* c, graph* g){
 			for (int j = 0; j<c->nrepincomp; j++) {
 				for (int k=0; k<c->nrepincomp; k++){
 					if (k==c->complementtc[j])
-						l[i*j*c->nrepincomp+k]=1;
+						l[(i*c->nrepincomp+j)*c->nrepincomp+k]=1;
 					else
-						l[i*j*c->nrepincomp+k]=c->lracomp[lastLevel[i]*c->nrepincomp+k];
+						l[(i*c->nrepincomp+j)*c->nrepincomp+k]=c->lracomp[lastLevel[i]*c->nrepincomp+k];
 				}
 			}
 		}
@@ -606,9 +613,10 @@ int secondpreprocess (cutdata* c, graph* g){
 			}
 		}
 
+
 		cudaMalloc((void**)&lc, sizeoflast*c->nrepincomp*c->nrepincomp*sizeof(int));
 		cudaMalloc((void**)&rc, sizeoflast*c->nrepincomp*c->nrep*sizeof(int));
-		cudaMalloc((void**)&lrc, c->lracompcard*c->nrepincomp*sizeof(int));
+		cudaMalloc((void**)&lrc, c->lnracompcard*c->nrep*sizeof(int));
 		cudaMalloc((void**)&mat, c->nacomp * c-> na * sizeof(int));
 		cudaMalloc((void**)&lrcard, sizeof(int));
 		cudaMalloc((void**)&width, sizeof(int));
@@ -618,7 +626,7 @@ int secondpreprocess (cutdata* c, graph* g){
 
 		cudaMemcpy(lc, l, sizeoflast*c->nrepincomp*c->nrepincomp*sizeof(int), cudaMemcpyHostToDevice);
 		cudaMemcpy(rc, r, sizeoflast*c->nrep*c->nrepincomp*sizeof(int), cudaMemcpyHostToDevice);
-		cudaMemcpy(lrc, c->lracomp, c->lracompcard*c->nrepincomp*sizeof(int), cudaMemcpyHostToDevice);
+		cudaMemcpy(lrc, c->lnracomp, c->lnracompcard*c->nrep*sizeof(int), cudaMemcpyHostToDevice);
 		cudaMemcpy(lrcard, &(c->lracompcard), sizeof(int), cudaMemcpyHostToDevice);
 		cudaMemcpy(mat, revMatrix, c->na*c->nacomp*sizeof(int), cudaMemcpyHostToDevice);
 		cudaMemcpy(width, &(c->nrep), sizeof(int), cudaMemcpyHostToDevice);
@@ -626,7 +634,7 @@ int secondpreprocess (cutdata* c, graph* g){
 		cudaMemcpy(rep, c->complementtc, c->nrepincomp*sizeof(int), cudaMemcpyHostToDevice);
 		cudaMemcpy(repc, c->tc, c->nrep*sizeof(int), cudaMemcpyHostToDevice);
 
-		computeNeighboorhoods<<<sizeoflast,c->nrep>>>(lc, rc, lrc, lrcard, mat, width, na, rep, repc);
+		computeNeighboorhoods<<<sizeoflast,c->nrepincomp>>>(lc, rc, lrc, lrcard, mat, width, na, rep, repc);
 
 		cudaMemcpy(l, lc, sizeoflast*c->nrepincomp*c->nrepincomp*sizeof(int), cudaMemcpyDeviceToHost);
 		cudaMemcpy(r, rc, sizeoflast*c->nrep*c->nrepincomp*sizeof(int), cudaMemcpyDeviceToHost);
@@ -673,6 +681,7 @@ int secondpreprocess (cutdata* c, graph* g){
 		c->lnracomp=lrtemp;
 		lastLevel=nextLevel;
 		sizeoflast=sizeofnext;
+		//printf("Yo\n");
 	}
 
 
@@ -780,6 +789,12 @@ void *threadAlgorithm ( void *arg){
 		}
 		i=(i+1)%nnodes;
 		pthread_mutex_lock(&mut);
+		printf("State of the art with %d left to compute\n", tocompute);
+		for (int k = 0;k<nnodes; k++)
+			printf("Node %d, computed = %d\n", k, nodestocompute[k]->computed);
+
+		
+
 	}
 	pthread_exit(NULL);
 }
@@ -790,19 +805,30 @@ int* toplevelalgorithm (dectree* t, graph* g, int n){
 		return NULL;
 	}
 
-	nnodes=getnumberofnodes(t);
+	nnodes=getnumberofnodes(t)-1;
 	tocompute=0;
 	nodestocompute=(dectree**)malloc(nnodes*sizeof(dectree*));
-	fillThevoid(t,g);
+	if (t->right!=NULL)
+		fillThevoid(t->right,g);
+	else
+		return toplevelalgorithm(t->left, g, n);
+
+	if (t->left!=NULL)
+		fillThevoid(t->left, g);
 	
+	pthread_t* threads = (pthread_t*)malloc(n*sizeof(pthread_t));
+
 	for (int i=0; i<n; i++){
-		pthread_t thread;
-		if (pthread_create(&thread, NULL, threadAlgorithm, &i)){
+		if (pthread_create(&threads[i], NULL, threadAlgorithm, &i)){
 			perror("pthread_create");
 			return NULL;
 		}
 	}
 	
+	for (int i = 0; i<n; i++){
+		pthread_join(threads[i],NULL);
+	}
+	printf("closing\n");
 
 	cutdata *c = (cutdata*)malloc(2*sizeof(cutdata));
 	stepalgorithm(t->left,g);
@@ -922,8 +948,11 @@ int stepalgorithm (dectree* t, graph* g){
 	if ((t->right==NULL)||(t->left==NULL)){
 		t->c = cutThatTree (g, t);
 		firstpreprocess (g,&(t->c));
+		printf("Fini?\n");
 		secondpreprocess (&(t->c), g);
+		printf("oui?\n");
 		thirdpreprocess (&(t->c), g);
+
 		t->c.tab = (int*)malloc(t->c.lracard*t->c.lracompcard*sizeof(int));
 		t->c.tab[0]=-1;
 		t->c.tab[1]=0;
@@ -933,15 +962,19 @@ int stepalgorithm (dectree* t, graph* g){
 		pthread_mutex_lock(&mut);
 		tocompute--;
 		pthread_mutex_unlock(&mut);
-	
+			printf("ah d'accord?\n");
 	}
 
 	else {
 		if ((t->right->computed==1)&&(t->left->computed==1)){
 			t->c = cutThatTree (g, t);
+			printf("Là\n");
 			firstpreprocess (g,&(t->c));
+			printf("C'est\n");
 			secondpreprocess (&(t->c), g);
+			printf("LA\n");
 			thirdpreprocess (&(t->c), g);
+			printf("Fête\n");
 			t->c.tab = (int*)malloc(t->c.lracard*t->c.lracompcard*sizeof(int));
 			t->c.box = (int*)malloc(t->c.lracard*t->c.lracompcard*6*sizeof(int));
 			for (int i = 0; i<t->c.lracard*t->c.lracompcard;i++){
@@ -1049,6 +1082,7 @@ int stepalgorithm (dectree* t, graph* g){
 			for (int i =0; i<t->c.lracompcard; i++){
 				for (int j = 0; j<t->left->c.lracard; j++){
 					for (int k = 0; k<t->right->c.lracard; k++){
+						printf(" SALUT %d/%d, %d/%d, %d, %d\n", i, t->c.lracompcard, j, t->left->c.lracard, k, t->right->c.lracard);
 						if (t->c.tab[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*t->c.lracompcard+i]==-1){
 							t->c.tab[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*t->c.lracompcard+i]=tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+3]+tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+4];
 							t->c.box[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*6*t->c.lracompcard+6*i]=j;
@@ -1079,6 +1113,7 @@ int stepalgorithm (dectree* t, graph* g){
 		}	
 		else {
 			t->computed=0;
+			printf("Can't compute for the moment\n");
 		}	
 	}
 
