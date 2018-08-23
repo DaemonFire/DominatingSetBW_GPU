@@ -129,7 +129,7 @@ void computeAlgorithm (int* tabg, int* lra, int* lrb, int* lrwc, int* lracard, i
 					break;
 				}
 			}
-			for (int j = 0; j< (*nrepb); j++){
+			for (int j = 0; j< (*nrepbc); j++){
 				if (repbcomp[j]==rep){
 					rep=j;
 					break;
@@ -147,7 +147,7 @@ void computeAlgorithm (int* tabg, int* lra, int* lrb, int* lrwc, int* lracard, i
 					break;
 				}
 			}
-			for (int j = 0; j< (*nrepb); j++){
+			for (int j = 0; j< (*nrepbc); j++){
 				if (repbcomp[j]==rep){
 					rep=j;
 					break;
@@ -277,13 +277,6 @@ cutdata cutThatTree (graph* g, dectree* t){
 		for (int j=0;j<c.nacomp;j++)
 			c.matrixrevisited[i*c.nacomp+j]=g->matrix[c.a[i]*g->size+c.acomp[j]];
 	}
-	/*	printf("M=\n");
-		for (int i =0; i<c.na; i++){
-			for (int j= 0; j<c.nacomp; j++){
-				printf("%d ", c.matrixrevisited[i*c.nacomp+j]);
-			}
-			printf("\n");
-		}*/
 	return c;
 }
 
@@ -846,31 +839,35 @@ void *threadAlgorithm ( void *arg){
 	int i = *((int*)arg);
 	int j = i;
 	int treating=1;
-	while (treating!=0){
+	while (treating>0){
 		pthread_mutex_lock(&mut);
-		if (tocompute==0){
+		tocompute=nnodes;
+		for (int k=0 ; k<nnodes; k++){
+			if (nodestocompute[k]->computed==1)
+				tocompute--;
+		}
+		if (tocompute<=0){
 			pthread_mutex_unlock(&mut);
 			treating=0;
 		}
 		else {
 			if (nodestocompute[i]->computed==0){
-			//	printf("Thread %d computing %d\n", j, i);
+				printf("Thread %d computing %d\n", j, i);
 				nodestocompute[i]->computed=2;
+				printf("State of the art with to compute at %d\n", tocompute);
+				for (int k=0; k<nnodes; k++)
+					printf("node %d is computed=%d\n", k, nodestocompute[k]->computed);
 				pthread_mutex_unlock(&mut);
 				stepalgorithm(nodestocompute[i],gwork);
 			}
 			else{
+				printf("State of the art with to compute at %d\n", tocompute);
+				for (int k=0; k<nnodes; k++)
+					printf("node %d is computed=%d\n", k, nodestocompute[k]->computed);
 				pthread_mutex_unlock(&mut);
-			//	printf("Thread %d: %d has already been computed\n", j, i);
 			}
 			i=(i+1)%nnodes;
 			
-			/*pthread_mutex_lock(&mut);
-			printf("State of the art with %d left to compute\n", tocompute);
-			for (int k = 0;k<nnodes; k++)
-				printf("Node %d, computed = %d\n", k, nodestocompute[k]->computed);
-			pthread_mutex_unlock(&mut);
-			*/
 		}
 
 	}
@@ -908,16 +905,22 @@ int* toplevelalgorithm (dectree* t, graph* g, int n){
 	int finished=0;
 	while (finished==0){
 		pthread_mutex_lock(&mut);
-		//printf("----------------------------------Main Thread sees tocompute at %d\n",tocompute);
+		tocompute = nnodes;
+		for (int i=0; i<nnodes; i++){
+			if (nodestocompute[i]->computed==1)
+				tocompute--;
+		}	
+		printf("%d / %d\n\n\n", tocompute, nnodes);
 		if (tocompute<=0)
 			finished=1;
 		pthread_mutex_unlock(&mut);
 	}
 	printf("-----------------------------------------------Preparing to close\n");
-	//for (int i=0; i<n; i++)
-	//	pthread_join(threads[i],NULL);
+	for (int i=0; i<n; i++)
+		pthread_join(threads[i],NULL);
+	//sleep(4);
 	printf("--------------------------------------------------------closing\n");
-	sleep(4);
+	
 	for (int i =0; i<nnodes; i++){
 		printf("Data of node %d-----------------------\n",i);
 		printf("a = ");
@@ -991,7 +994,8 @@ int* toplevelalgorithm (dectree* t, graph* g, int n){
 			}
 			printf("\n");
 		}
-	/*	printf("box =\n");
+/*
+		printf("box =\n");
 		for (int j=0; j<nodestocompute[i]->c.lracard; j++){
 			for (int k=0; k<nodestocompute[i]->c.lracompcard; k++){
 				for (int l=0; l<6; l++){
@@ -1000,8 +1004,8 @@ int* toplevelalgorithm (dectree* t, graph* g, int n){
 				printf("   ");
 			}
 			printf("\n");
-		}*/
-
+		}
+		*/
 	}
 
 	cutdata *c = (cutdata*)malloc(2*sizeof(cutdata));
@@ -1071,7 +1075,7 @@ int* toplevelalgorithm (dectree* t, graph* g, int n){
 				indexbc = c2.mcomp[indexbc*c2.nrepincomp+rep];
 				}
 			}
-			printf(" i=%d, indexac=%d, j=%d, indexbc=%d, sum=%d, amax=%d, acmax=%d, bmax=%d, bcmax=%d, size=%d\n", i, indexac, j, indexbc, c1.tab[i*c1.lracompcard+indexac]+c2.tab[j*c2.lracompcard+indexbc], amax, acmax, bmax, bcmax, size);
+
 			if ((size==-1)&&(c1.tab[i*c1.lracompcard+indexac]!=-1)&&(c2.tab[j*c2.lracompcard+indexbc]!=-1)){
 				size=c1.tab[i*c1.lracompcard+indexac]+c2.tab[j*c2.lracompcard+indexbc];
 				amax=i;
@@ -1144,9 +1148,9 @@ int stepalgorithm (dectree* t, graph* g){
 		t->c.tab[2]=1;
 		t->c.tab[3]=1;
 		t->computed=1;
-		pthread_mutex_lock(&mut);
-		tocompute--;
-		pthread_mutex_unlock(&mut);
+	//	pthread_mutex_lock(&mut);
+	//	tocompute--;
+	//	pthread_mutex_unlock(&mut);
 	}
 
 	else {
@@ -1277,21 +1281,9 @@ int stepalgorithm (dectree* t, graph* g){
 
 			cudaMemcpy(tmptab, tabg, 5*t->right->c.lracard*t->left->c.lracard*t->c.lracompcard*sizeof(int), cudaMemcpyDeviceToHost);			
 
-			printf("a = ");
-			for (int i=0; i<t->c.na; i++)
-				printf("%d, ", t->c.a[i]);
-			printf("\n tmptab =\n");
-			for (int i=0; i<t->right->c.lracard*t->left->c.lracard*t->c.lracompcard; i++){
-				for (int j=0; j<5; j++){
-					printf("%d ",tmptab[5*i+j]);
-				}
-				printf("\n");
-			}
-
 			for (int i =0; i<t->c.lracompcard; i++){
 				for (int j = 0; j<t->left->c.lracard; j++){
 					for (int k = 0; k<t->right->c.lracard; k++){
-					//	printf(" SALUT %d/%d, %d/%d, %d, %d\n", i, t->c.lracompcard, j, t->left->c.lracard, k, t->right->c.lracard);
 						if ((t->c.tab[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*t->c.lracompcard+i]==-1)&&(tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+3]!=-1)&&(tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+4]!=-1)){
 							t->c.tab[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*t->c.lracompcard+i]=tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+3]+tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+4];
 							t->c.box[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*6*t->c.lracompcard+6*i]=j;
@@ -1315,14 +1307,14 @@ int stepalgorithm (dectree* t, graph* g){
 					}
 				}
 				t->computed=1;
-				pthread_mutex_lock(&mut);
-				tocompute--;
-				pthread_mutex_unlock(&mut);
+			//	pthread_mutex_lock(&mut);
+			//	tocompute--;
+			//	pthread_mutex_unlock(&mut);
 			}
 		}	
 		else {
 			t->computed=0;
-		//	printf("Can't compute for the moment\n");
+		
 		}	
 	}
 
