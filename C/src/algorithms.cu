@@ -852,18 +852,18 @@ void *threadAlgorithm ( void *arg){
 		}
 		else {
 			if (nodestocompute[i]->computed==0){
-				printf("Thread %d computing %d\n", j, i);
+			//	printf("Thread %d computing %d\n", j, i);
 				nodestocompute[i]->computed=2;
-				printf("State of the art with to compute at %d\n", tocompute);
+			/*	printf("State of the art with to compute at %d\n", tocompute);
 				for (int k=0; k<nnodes; k++)
-					printf("node %d is computed=%d\n", k, nodestocompute[k]->computed);
+					printf("node %d is computed=%d\n", k, nodestocompute[k]->computed);*/
 				pthread_mutex_unlock(&mut);
 				stepalgorithm(nodestocompute[i],gwork);
 			}
 			else{
-				printf("State of the art with to compute at %d\n", tocompute);
+			/*	printf("State of the art with to compute at %d\n", tocompute);
 				for (int k=0; k<nnodes; k++)
-					printf("node %d is computed=%d\n", k, nodestocompute[k]->computed);
+					printf("node %d is computed=%d\n", k, nodestocompute[k]->computed);*/
 				pthread_mutex_unlock(&mut);
 			}
 			i=(i+1)%nnodes;
@@ -910,7 +910,7 @@ int* toplevelalgorithm (dectree* t, graph* g, int n){
 			if (nodestocompute[i]->computed==1)
 				tocompute--;
 		}	
-		printf("%d / %d\n\n\n", tocompute, nnodes);
+	//	printf("%d / %d\n\n\n", tocompute, nnodes);
 		if (tocompute<=0)
 			finished=1;
 		pthread_mutex_unlock(&mut);
@@ -994,7 +994,7 @@ int* toplevelalgorithm (dectree* t, graph* g, int n){
 			}
 			printf("\n");
 		}
-/*
+
 		printf("box =\n");
 		for (int j=0; j<nodestocompute[i]->c.lracard; j++){
 			for (int k=0; k<nodestocompute[i]->c.lracompcard; k++){
@@ -1005,7 +1005,7 @@ int* toplevelalgorithm (dectree* t, graph* g, int n){
 			}
 			printf("\n");
 		}
-		*/
+		
 	}
 
 	cutdata *c = (cutdata*)malloc(2*sizeof(cutdata));
@@ -1113,7 +1113,7 @@ int* toplevelalgorithm (dectree* t, graph* g, int n){
 		}
 		printf("\n");
 	}
-	int * sol = (int*)malloc((c2.tab[bmax*c2.lracompcard+bcmax]+c1.tab[amax*c1.lracompcard+acmax])*sizeof(int));
+	int * sol = (int*)malloc((size)*sizeof(int));
 	int* left = (int*)malloc(c1.tab[amax*c1.lracompcard+acmax]*sizeof(int));
 	int* right= (int*)malloc(c2.tab[bmax*c2.lracompcard+bcmax]*sizeof(int));
 	left = computeDS (t->left, c1.tab[amax*c1.lracompcard+acmax], amax, acmax);
@@ -1143,6 +1143,9 @@ int stepalgorithm (dectree* t, graph* g){
 		thirdpreprocess (&(t->c), g);
 
 		t->c.tab = (int*)malloc(t->c.lracard*t->c.lracompcard*sizeof(int));
+		t->c.box = (int*)malloc(6*t->c.lracard*t->c.lracompcard*sizeof(int));
+		for (int i=0; i<6*t->c.lracard*t->c.lracompcard; i++)
+			t->c.box[i]=-1;
 		t->c.tab[0]=-1;
 		t->c.tab[1]=0;
 		t->c.tab[2]=1;
@@ -1281,36 +1284,57 @@ int stepalgorithm (dectree* t, graph* g){
 
 			cudaMemcpy(tmptab, tabg, 5*t->right->c.lracard*t->left->c.lracard*t->c.lracompcard*sizeof(int), cudaMemcpyDeviceToHost);			
 
+			printf("a=");
+			for (int i=0; i<t->c.na; i++)
+				printf("%d, ", t->c.a[i]);
+			printf("\n");
+			for (int i=0; i<t->c.lracompcard; i++){
+				for (int j=0; j<t->left->c.lracard; j++){
+					for (int k =0; k<t->right->c.lracard; k++){
+						for (int l=0; l<5; l++)
+							printf("%d, ", tmptab[5*t->right->c.lracard*t->left->c.lracard*i+j*5*t->right->c.lracard+k*5+l]);
+						printf(" \n");
+					}
+				}
+			}
+
+
 			for (int i =0; i<t->c.lracompcard; i++){
 				for (int j = 0; j<t->left->c.lracard; j++){
 					for (int k = 0; k<t->right->c.lracard; k++){
 						if ((t->c.tab[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*t->c.lracompcard+i]==-1)&&(tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+3]!=-1)&&(tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+4]!=-1)){
 							t->c.tab[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*t->c.lracompcard+i]=tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+3]+tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+4];
 							t->c.box[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*6*t->c.lracompcard+6*i]=j;
-							t->c.box[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*6*t->c.lracompcard+6*i+1]=tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+3]+tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+1];
-							t->c.box[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*2*t->c.lracompcard+6*i+2]=tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+3];
-							t->c.box[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*2*t->c.lracompcard+2*i+3]=k;
-							t->c.box[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*2*t->c.lracompcard+2*i+4]=tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+2];
-							t->c.box[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*2*t->c.lracompcard+2*i+5]=tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+4];
+							t->c.box[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*6*t->c.lracompcard+6*i+1]=tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+1];
+							t->c.box[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*6*t->c.lracompcard+6*i+2]=tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+3];
+							t->c.box[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*6*t->c.lracompcard+6*i+3]=k;
+							t->c.box[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*6*t->c.lracompcard+6*i+4]=tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+2];
+							t->c.box[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*6*t->c.lracompcard+6*i+5]=tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+4];
 						}
 						else {
 							if ((tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+3]!=-1)&&(tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+4]!=-1)&&(tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+3]+tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+4]<t->c.tab[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*t->c.lracompcard+i])){
 								t->c.tab[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*t->c.lracompcard+i]=tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+3]+tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+4];
 								t->c.box[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*6*t->c.lracompcard+6*i]=j;
-								t->c.box[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*6*t->c.lracompcard+6*i+1]=tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+3]+tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+1];
-								t->c.box[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*2*t->c.lracompcard+6*i+2]=tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+3];
-								t->c.box[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*2*t->c.lracompcard+2*i+3]=k;
-								t->c.box[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*2*t->c.lracompcard+2*i+4]=tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+2];
-								t->c.box[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*2*t->c.lracompcard+2*i+5]=tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+4];
+								t->c.box[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*6*t->c.lracompcard+6*i+1]=tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+1];
+								t->c.box[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*6*t->c.lracompcard+6*i+2]=tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+3];
+								t->c.box[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*6*t->c.lracompcard+6*i+3]=k;
+								t->c.box[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*6*t->c.lracompcard+6*i+4]=tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+2];
+								t->c.box[tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5]*6*t->c.lracompcard+6*i+5]=tmptab[5*t->left->c.lracard*t->right->c.lracard*i+j*5*t->right->c.lracard+k*5+4];
 							}
 						}
 					}
 				}
-				t->computed=1;
 			//	pthread_mutex_lock(&mut);
 			//	tocompute--;
 			//	pthread_mutex_unlock(&mut);
 			}
+/*
+			for (int i=0; i<t->c.lracard; i++){
+				for (int j=0; j<t->c.lracompcard; j++){
+					t->c.tab[i*t->c.lracompcard+j]=t->c.box[6*i*t->c.lracompcard+6*j+2]+t->c.box[6*i*t->c.lracompcard+6*j+5];
+				}
+			}*/
+			t->computed=1;
 		}	
 		else {
 			t->computed=0;
@@ -1322,6 +1346,7 @@ int stepalgorithm (dectree* t, graph* g){
 }
 
 int* computeDS (dectree* t, int much, int aleft, int acleft){
+	printf("much=%d\n",much);
 	int* sol = (int*)malloc(much*sizeof(int));
 
 	if ((t->left==NULL)&&(t->right==NULL)&&(much==1)){
@@ -1330,7 +1355,7 @@ int* computeDS (dectree* t, int much, int aleft, int acleft){
 
 	else if (much!=0){
 		int *left=(int*)malloc(t->c.box[6*t->c.lracompcard*aleft+6*acleft+2]);
-		left = computeDS (t->left, t->c.box[6*t->c.lracompcard*aleft+6*acleft+2], t->c.box[6*t->c.lracompcard*aleft+6*acleft+1], t->c.box[6*t->c.lracompcard*aleft+6*acleft+1]);
+		left = computeDS (t->left, t->c.box[6*t->c.lracompcard*aleft+6*acleft+2], t->c.box[6*t->c.lracompcard*aleft+6*acleft+0], t->c.box[6*t->c.lracompcard*aleft+6*acleft+1]);
 	
 
 		int *right=(int*)malloc(t->c.box[6*t->c.lracompcard*aleft+6*acleft+5]);
