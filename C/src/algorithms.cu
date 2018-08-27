@@ -92,24 +92,7 @@ void computeNeighboorhoods(int* lc, int* rc, int* lrc, int* lrcard, int* mat, in
 		else
 			rc[(blockIdx.x*blockDim.x+threadIdx.x)*(*width)+i]=0;
 	}
-	/*
-	int already=0;
-	for (int i=0; i<*lrcard; i++){
-		int id=1;
-		for (int j = 0; j<*width;j++){
-			if (rc[(blockIdx.x*blockDim.x+threadIdx.x)*(*width)+j]!=lrc[i*(*width)+j]){
-				id=0;
-				break;
-			}
-		}
-		if (id == 1){
-			already=1;
-			break;
-		}
-	}
-	if (already==1)
-		rc[(blockIdx.x*blockDim.x+threadIdx.x)*(*width)]=-1;
-	*/
+	
 }
 
 __global__
@@ -483,8 +466,9 @@ int secondpreprocess (cutdata* c, graph* g){
 	c->lnra[i]=0;
 
 	int *nextLevel;
-	int *lastLevel=(int*)malloc(sizeof(int));
-	lastLevel[0]=0;
+	int *lastLevel=(int*)malloc(c->nrep*sizeof(int));
+	for (int i=0; i<c->nrep; i++)
+		lastLevel[i]=0;
 
 	int sizeoflast=1;
 	int sizeofnext=0;
@@ -499,7 +483,7 @@ int secondpreprocess (cutdata* c, graph* g){
 					if (k==j)
 						l[(i*c->nrep+j)*c->nrep+k]=1;
 					else
-						l[(i*c->nrep+j)*c->nrep+k]=c->lra[lastLevel[i]*c->nrep+k];
+						l[(i*c->nrep+j)*c->nrep+k]=lastLevel[i*c->nrep+k];
 				}
 			}
 		}
@@ -625,7 +609,7 @@ int secondpreprocess (cutdata* c, graph* g){
 					if (k==j)
 						l[(i*c->nrepincomp+j)*c->nrepincomp+k]=1;
 					else
-						l[(i*c->nrepincomp+j)*c->nrepincomp+k]=c->lracomp[lastLevel[i]*c->nrepincomp+k];
+						l[(i*c->nrepincomp+j)*c->nrepincomp+k]=lastLevel[i*c->nrepincomp+k];
 				}
 			}
 		}
@@ -920,7 +904,7 @@ int* toplevelalgorithm (dectree* t, graph* g, int n){
 		pthread_join(threads[i],NULL);
 	//sleep(4);
 	printf("--------------------------------------------------------closing\n");
-	
+/*	
 	for (int i =0; i<nnodes; i++){
 		printf("Data of node %d-----------------------\n",i);
 		printf("a = ");
@@ -1007,7 +991,7 @@ int* toplevelalgorithm (dectree* t, graph* g, int n){
 		}
 		
 	}
-
+*/
 	cutdata *c = (cutdata*)malloc(2*sizeof(cutdata));
 	cutdata c1 = t->left->c;
 	cutdata c2= t->right->c;
@@ -1098,21 +1082,8 @@ int* toplevelalgorithm (dectree* t, graph* g, int n){
 		}
 		
 	}
-	printf("sol = %d, bmax= %d, bcmax= %d, amax= %d, acmax= %d\n", size, bmax, bcmax, amax, acmax);
-	printf("c1.tab=\n");
-	for (int i= 0; i<c1.lracard; i++){
-		for (int j=0; j<c1.lracompcard; j++){
-			printf("%d ", c1.tab[i*c1.lracompcard+j]);
-		}
-		printf("\n");
-	}
-	printf("c2.tab=\n");
-	for (int i= 0; i<c2.lracard; i++){
-		for (int j=0; j<c2.lracompcard; j++){
-			printf("%d ", c2.tab[i*c2.lracompcard+j]);
-		}
-		printf("\n");
-	}
+	printf("Dominating set of size %d\n", size);
+
 	int * sol = (int*)malloc((size)*sizeof(int));
 	int* left = (int*)malloc(c1.tab[amax*c1.lracompcard+acmax]*sizeof(int));
 	int* right= (int*)malloc(c2.tab[bmax*c2.lracompcard+bcmax]*sizeof(int));
@@ -1151,9 +1122,6 @@ int stepalgorithm (dectree* t, graph* g){
 		t->c.tab[2]=1;
 		t->c.tab[3]=1;
 		t->computed=1;
-	//	pthread_mutex_lock(&mut);
-	//	tocompute--;
-	//	pthread_mutex_unlock(&mut);
 	}
 
 	else {
@@ -1284,21 +1252,6 @@ int stepalgorithm (dectree* t, graph* g){
 
 			cudaMemcpy(tmptab, tabg, 5*t->right->c.lracard*t->left->c.lracard*t->c.lracompcard*sizeof(int), cudaMemcpyDeviceToHost);			
 
-			printf("a=");
-			for (int i=0; i<t->c.na; i++)
-				printf("%d, ", t->c.a[i]);
-			printf("\n");
-			for (int i=0; i<t->c.lracompcard; i++){
-				for (int j=0; j<t->left->c.lracard; j++){
-					for (int k =0; k<t->right->c.lracard; k++){
-						for (int l=0; l<5; l++)
-							printf("%d, ", tmptab[5*t->right->c.lracard*t->left->c.lracard*i+j*5*t->right->c.lracard+k*5+l]);
-						printf(" \n");
-					}
-				}
-			}
-
-
 			for (int i =0; i<t->c.lracompcard; i++){
 				for (int j = 0; j<t->left->c.lracard; j++){
 					for (int k = 0; k<t->right->c.lracard; k++){
@@ -1324,16 +1277,7 @@ int stepalgorithm (dectree* t, graph* g){
 						}
 					}
 				}
-			//	pthread_mutex_lock(&mut);
-			//	tocompute--;
-			//	pthread_mutex_unlock(&mut);
 			}
-/*
-			for (int i=0; i<t->c.lracard; i++){
-				for (int j=0; j<t->c.lracompcard; j++){
-					t->c.tab[i*t->c.lracompcard+j]=t->c.box[6*i*t->c.lracompcard+6*j+2]+t->c.box[6*i*t->c.lracompcard+6*j+5];
-				}
-			}*/
 			t->computed=1;
 		}	
 		else {
@@ -1346,7 +1290,6 @@ int stepalgorithm (dectree* t, graph* g){
 }
 
 int* computeDS (dectree* t, int much, int aleft, int acleft){
-	printf("much=%d\n",much);
 	int* sol = (int*)malloc(much*sizeof(int));
 
 	if ((t->left==NULL)&&(t->right==NULL)&&(much==1)){
