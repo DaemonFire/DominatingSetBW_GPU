@@ -859,10 +859,10 @@ void *threadAlgorithm ( void *arg){
 	pthread_exit(NULL);
 }
 
-int* toplevelalgorithm (dectree* t, graph* g, int n){
+int toplevelalgorithm (dectree* t, graph* g, int n, int* set){
 
 	if ((t->right==NULL)||(t->left==NULL)){
-		return NULL;
+		return 0;
 	}
 
 	nnodes=getnumberofnodes(t)-1;
@@ -871,7 +871,7 @@ int* toplevelalgorithm (dectree* t, graph* g, int n){
 	if (t->right!=NULL)
 		fillThevoid(t->right,g);
 	else
-		return toplevelalgorithm(t->left, g, n);
+		return toplevelalgorithm(t->left, g, n, set);
 
 	if (t->left!=NULL)
 		fillThevoid(t->left, g);
@@ -881,7 +881,7 @@ int* toplevelalgorithm (dectree* t, graph* g, int n){
 	for (int i=0; i<n; i++){
 		if (pthread_create(&threads[i], NULL, threadAlgorithm, &i)){
 			perror("pthread_create");
-			return NULL;
+			return 0;
 		}
 	}
 	printf("Initiating threads\n");
@@ -904,7 +904,7 @@ int* toplevelalgorithm (dectree* t, graph* g, int n){
 		pthread_join(threads[i],NULL);
 	//sleep(4);
 	printf("--------------------------------------------------------closing\n");
-/*	
+
 	for (int i =0; i<nnodes; i++){
 		printf("Data of node %d-----------------------\n",i);
 		printf("a = ");
@@ -991,7 +991,7 @@ int* toplevelalgorithm (dectree* t, graph* g, int n){
 		}
 		
 	}
-*/
+
 	cutdata *c = (cutdata*)malloc(2*sizeof(cutdata));
 	cutdata c1 = t->left->c;
 	cutdata c2= t->right->c;
@@ -1096,12 +1096,14 @@ int* toplevelalgorithm (dectree* t, graph* g, int n){
 	for (int i = 0; i< c2.tab[bmax*c2.lracompcard+bcmax]; i++)
 		sol[i+c1.tab[amax*c1.lracompcard+acmax]]=right[i];
 	
-
+/*
 	for (int i = 0; i<c2.tab[bmax*c2.lracompcard+bcmax]+c1.tab[amax*c1.lracompcard+acmax];i++)
 		printf("%d, ", sol[i]);
 	
 	printf("\n");
-	return sol;
+*/
+	set=sol;
+	return size;
 }
 
 
@@ -1316,33 +1318,28 @@ int* computeDS (dectree* t, int much, int aleft, int acleft){
 	return sol;
 }
 
-int getBW (dectree t, graph g){
+int getBW (dectree* t, graph* g){
 	int bwmax=-1;
-	if ((t.right==NULL)||(t.left==NULL))
-		bwmax=-1;
+	if ((t->right==NULL)||(t->left==NULL))
+		bwmax=2;
 	else {
-		cutdata c1 = cutThatTree (&g, &t);
+		t->c = cutThatTree (g, t);
 
-		firstpreprocess (&g,&c1);
-		secondpreprocess (&c1, &g);
+		firstpreprocess (g,&(t->c));
+		secondpreprocess (&(t->c), g);
 
-		cutdata c2 = cutThatTree (&g, &t);
-
-		firstpreprocess (&g,&c2);
-		secondpreprocess (&c2, &g);
 		
-		int p  = getBW(*(t.left), g);
-		int q  = getBW(*(t.right), g);
+		int p  = getBW(t->left, g);
+		int q  = getBW(t->right, g);
 		
 
 		if (p>bwmax)
 			bwmax=p;
 		if (q>bwmax)
 			bwmax=q;
-		if (c1.lracard>bwmax)
-			bwmax=c1.lracard;
-		if (c2.lracard>bwmax)
-			bwmax=c2.lracard;
+		if (t->c.lracard>bwmax)
+			bwmax=t->c.lracard;
+
 	}
 	return bwmax;
 }

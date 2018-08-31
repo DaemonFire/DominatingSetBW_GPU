@@ -25,12 +25,12 @@ int secondpreprocess (cutdata* c, graph* g);
 
 int thirdpreprocess (cutdata* c, graph* g);
 
-int* toplevelalgorithm (dectree* t, graph* g, int n);
+int toplevelalgorithm (dectree* t, graph* g, int n, int* set);
 
 int stepalgorithm (dectree* t, graph* g);
 
 int* computeDS (dectree* t, int much, int aleft, int acleft);
 
-int getBW (dectree t, graph g);
+int getBW (dectree* t, graph* g);
 
 #endif

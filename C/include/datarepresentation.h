@@ -56,6 +56,8 @@ typedef struct graph {
 	int* matrix;
 	int* pos;
 	int size;
+	int sizeset;
+	int* domset;
 } graph;
 
 #endif

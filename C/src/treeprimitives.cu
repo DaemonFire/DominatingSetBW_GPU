@@ -1,4 +1,5 @@
 #include "../include/treeprimitives.h"
+#include "../include/algorithms.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -410,22 +411,36 @@ dectree *generateTreeBWstep (graph g, pointset dec, int i){
 
 
 dectree *generateTreeBW (graph g){
+	dectree **t = (dectree**)malloc(g.size*sizeof(dectree*));
+	int *bw = (int*)malloc(g.size*sizeof(int));
+	for (int i=0; i<g.size; i++){
+		pointset dec=incrementalUNheuristic (g, i);
+		t[i]=(dectree*)malloc(sizeof(dectree));
+		dectree *tleft;
+		tleft=(dectree*)malloc(sizeof(dectree));
+		dectree *tright;
+		tright=(dectree*)malloc(sizeof(dectree));
+		(*tright).label=dec.members[dec.size-1];
+		(*tright).left=NULL;
+		(*tright).right=NULL;
+		tleft=generateTreeBWstep (g, dec, 1);
+		t[i]->left=tleft;
+		t[i]->right=tright;
+		t[i]->label=-1;
+		bw[i]=getBW(t[i]->left, &g);
+		bw[i]+=getBW(t[i]->right, &g);
+	} 
 
-	pointset dec=incrementalUNheuristic (g, 0);
-	dectree *t;
-	t=(dectree*)malloc(sizeof(dectree));
-	dectree *tleft;
-	tleft=(dectree*)malloc(sizeof(dectree));
-	dectree *tright;
-	tright=(dectree*)malloc(sizeof(dectree));
-	(*tright).label=dec.members[dec.size-1];
-	(*tright).left=NULL;
-	(*tright).right=NULL;
-	tleft=generateTreeBWstep (g, dec, 1);
-	(*t).left=tleft;
-	(*t).right=tright;
-	(*t).label=-1; 
-	return t;
+	int size=bw[0];
+	int min=0;
+
+	for (int i=1; i<g.size; i++){
+		if (bw[i]<size){
+			size=bw[i];
+			min=i;
+		}
+	}
+	return t[min];
 }
 
 
