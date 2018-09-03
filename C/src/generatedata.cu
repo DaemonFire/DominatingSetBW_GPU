@@ -56,8 +56,6 @@ int computeconnexcomposants (graph* g, graph** components, int threshold){
 		computed[i]=-1;
 	int i=0;
 	while (i<g->size){
-
-		int needtogoback=0;
 		if (computed[i]==-1){
 			computed[i]=which;
 			which++;
@@ -71,17 +69,19 @@ int computeconnexcomposants (graph* g, graph** components, int threshold){
 					if (computed[j]>=computed[i])
 						computed[j]=computed[i];
 					else{
-						computed[i]=computed[j];
-						needtogoback=1;
-						break;
+						int previous = computed[i];
+						int new = computed[j];
+						for (int k=0; k<g->size; k++){
+							if (computed[k]==previous)
+								computed[k]=new;
+						}
 					}
 				}
 
 			}
 
 		}
-		if (needtogoback==0)
-			i++;
+		i++;
 	}
 	for (int i=0; i<which; i++){
 		int number=0;
@@ -99,7 +99,6 @@ int computeconnexcomposants (graph* g, graph** components, int threshold){
 			}
 			i--;
 		}
-
 	}
 
 	for (int i=0; i<which; i++){
@@ -125,6 +124,7 @@ int computeconnexcomposants (graph* g, graph** components, int threshold){
 	}
 	return which;
 }
+
 
 graph generategraph (int nbpoint, int xrange, int yrange, int threshold){
 

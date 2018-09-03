@@ -440,6 +440,7 @@ dectree *generateTreeBW (graph g){
 			min=i;
 		}
 	}
+	printf("Boolean width=%d\n",size);
 	return t[min];
 }
 

@@ -14,64 +14,67 @@
 #include <time.h>
 
 int main (int argc, char** argv){
-	if (argc!=2)
+	if (argc!=3)
 		return EXIT_FAILURE;
 	graph* g = (graph*)malloc(sizeof(graph));
-	*g =loadgraph(argv[1], 180);
+	int threshold = atoi(argv[2]);
+	*g =loadgraph(argv[1], threshold);
 	graph *h = (graph*)malloc(sizeof(graph));
 	*h = *g;
 	int* sol = (int*)malloc(g->size*sizeof(int));
 	int size=0;
-	//graph g = loadgraphformat2(argv[1]);
+	size = preprocessingsolopoints (g, sol, threshold);
+	int sizeinit=size;
 
 	printf("g.size=%d\n", g->size);
 	printf("number of edges=%d\n", getEdgeNumber(*g));
 	//dectree t = loadtree("tiefighter.tree");
 	//dectree *t = generateTree(p,g,0);
-	size = preprocessingsolopoints (g, sol, 180);
-	int sizeinit=size;
-
 	graph** components = (graph**)malloc(g->size*sizeof(graph*));
-	int ncomp = computeconnexcomposants (g, components, 180);
+	int ncomp = computeconnexcomposants (g, components, threshold);
 	struct timeval stop, start;
 	gettimeofday(&start, NULL);
-
 	for (int i=0; i<ncomp; i++){
 		dectree *t=generateTreeBW (*components[i]);
-		int* x=(int*)malloc(g->size*sizeof(int));
-		int sizetmp=0;
-		if (components[i]->size>0)
-			sizetmp = toplevelalgorithm (t, components[i], components[i]->size, x);
+		pointset x;
+		if (components[i]->size>0){
+			x = toplevelalgorithm (t, components[i], components[i]->size);
+		}	
+		else
+			x.size=0;
 	
-		if (sizetmp<0)
-			sizetmp=0;
-
-		for (int j=0; j<sizetmp; j++)
-			sol[size+j]=x[j];
-		size+=sizetmp;
-		components[i]->sizeset=sizetmp;
-		components[i]->domset=x;
+		if (x.size<0)
+			x.size=0;
+		
+		for (int j=0; j<x.size; j++)
+			sol[size+j]=x.members[j];
+		size+=x.size;
+		components[i]->sizeset=x.size;
+		components[i]->domset=x.members;
 	}
 	for (int i=0; i<sizeinit; i++){
 		printf("(%d, %d),  ", h->pos[2*sol[i]], h->pos[2*sol[i]+1]);
 	}
+	printf("|");
+	int cursor =sizeinit;
 	for (int i=0; i<ncomp; i++){
 		for (int j=0; j<components[i]->sizeset; j++){
-			printf("(%d, %d), ", components[i]->pos[2*sol[j]], g->pos[2*sol[j]+1]);
+			printf("(%d, %d), ", components[i]->pos[2*components[i]->domset[j]], components[i]->pos[2*components[i]->domset[j]+1]);
 		}
+		cursor+=components[i]->sizeset;
+		printf("|");
 	}
-	gettimeofday(&stop, NULL);
 	printf("\n");
 	printf("There are %d composants\n", ncomp);
-
+	gettimeofday(&stop, NULL);
 	printf("Minimum Dominating Set is of size %d\n",size);
+	//printf("\n");
+	//generatePlotFile (*t, g);
 
 
+	long timeToSet=1000000*(stop.tv_sec-start.tv_sec)+stop.tv_usec - start.tv_usec;
 
-	int timeToSet=stop.tv_usec - start.tv_usec;
-
-	printf("Time elapsed for set=%d\n",timeToSet);
-
+	printf("Time elapsed for set=%ld\n",timeToSet);
 
 	return EXIT_SUCCESS;
 }
