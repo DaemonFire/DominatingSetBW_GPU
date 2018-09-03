@@ -410,7 +410,7 @@ dectree *generateTreeBWstep (graph g, pointset dec, int i){
 }
 
 
-dectree *generateTreeBW (graph g){
+dectree *generateTreeBW (graph g, int z){
 	dectree **t = (dectree**)malloc(g.size*sizeof(dectree*));
 	int *bw = (int*)malloc(g.size*sizeof(int));
 	for (int i=0; i<g.size; i++){
@@ -427,8 +427,8 @@ dectree *generateTreeBW (graph g){
 		t[i]->left=tleft;
 		t[i]->right=tright;
 		t[i]->label=-1;
-		bw[i]=getBW(t[i]->left, &g);
-		bw[i]+=getBW(t[i]->right, &g);
+		bw[i]=getBW(t[i]->left, &g, z);
+		bw[i]+=getBW(t[i]->right, &g, z);
 	} 
 
 	int size=bw[0];

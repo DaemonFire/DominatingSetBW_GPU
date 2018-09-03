@@ -11,21 +11,32 @@
 #include <sys/stat.h>
 #include <pthread.h>
 
-int nnodes;
-dectree** nodestocompute;
-int tocompute;
-pthread_mutex_t mut;
-graph* gwork;
+int* nnodes;
+dectree*** nodestocompute;
+int* tocompute;
+pthread_mutex_t* mut;
+graph** gwork;
 
-int fillThevoid (dectree* t, graph* g){
-	gwork=g;
+int inital (int ncomp){
+	nnodes = (int*)malloc(ncomp*sizeof(int));
+	nodestocompute = (dectree***)malloc(ncomp*sizeof(dectree**));
+	tocompute = (int*)malloc(ncomp*sizeof(int));
+	mut = (pthread_mutex_t*)malloc(ncomp*sizeof(pthread_mutex_t));
+	gwork = (graph**)malloc(ncomp*sizeof(graph*));
+	for (int i=0; i<ncomp; i++)
+		pthread_mutex_init(&mut[i], NULL);
+	return EXIT_SUCCESS;
+}
+
+int fillThevoid (dectree* t, graph* g, int i){
+	gwork[i]=g;
 	t->computed=0;
-	nodestocompute[tocompute]=t;
-	tocompute++;
+	nodestocompute[i][tocompute[i]]=t;
+	tocompute[i]++;
 	if (t->left!=NULL)
-		fillThevoid(t->left, g);
+		fillThevoid(t->left, g, i);
 	if (t->right!=NULL)
-		fillThevoid(t->right, g);
+		fillThevoid(t->right, g, i);
 	return EXIT_SUCCESS;
 }
 
@@ -593,8 +604,9 @@ int secondpreprocess (cutdata* c, graph* g){
 
 	nextLevel=NULL;
 	lastLevel=NULL;
-	lastLevel=(int*)malloc(sizeof(int));
-	lastLevel[0]=0;
+	lastLevel=(int*)malloc(c->nrepincomp*sizeof(int));
+	for (int i=0; i<c->nrepincomp; i++)
+		lastLevel[i]=0;
 
 	sizeoflast=1;
 	sizeofnext=0;
@@ -820,66 +832,66 @@ int thirdpreprocess (cutdata* c, graph* g){
 }
 
 void *threadAlgorithm ( void *arg){
-	int i = *((int*)arg);
-	int j = i;
+	int j = *((int*)arg);
+	int i=0;
 	int treating=1;
 	while (treating>0){
-		pthread_mutex_lock(&mut);
-		tocompute=nnodes;
-		for (int k=0 ; k<nnodes; k++){
-			if (nodestocompute[k]->computed==1)
-				tocompute--;
+		pthread_mutex_lock(&mut[j]);
+		tocompute[j]=nnodes[j];
+		for (int k=0 ; k<nnodes[j]; k++){
+			if (nodestocompute[j][k]->computed==1)
+				tocompute[j]--;
 		}
-		if (tocompute<=0){
-			pthread_mutex_unlock(&mut);
+		if (tocompute[j]<=0){
+			pthread_mutex_unlock(&mut[j]);
 			treating=0;
 		}
 		else {
-			if (nodestocompute[i]->computed==0){
+			if (nodestocompute[j][i]->computed==0){
 			//	printf("Thread %d computing %d\n", j, i);
-				nodestocompute[i]->computed=2;
+				nodestocompute[j][i]->computed=2;
 			/*	printf("State of the art with to compute at %d\n", tocompute);
 				for (int k=0; k<nnodes; k++)
 					printf("node %d is computed=%d\n", k, nodestocompute[k]->computed);*/
-				pthread_mutex_unlock(&mut);
-				stepalgorithm(nodestocompute[i],gwork);
+				pthread_mutex_unlock(&mut[j]);
+				stepalgorithm(nodestocompute[j][i],gwork[j]);
 			}
 			else{
 			/*	printf("State of the art with to compute at %d\n", tocompute);
 				for (int k=0; k<nnodes; k++)
 					printf("node %d is computed=%d\n", k, nodestocompute[k]->computed);*/
-				pthread_mutex_unlock(&mut);
+				pthread_mutex_unlock(&mut[j]);
 			}
-			i=(i+1)%nnodes;
+			i=(i+1)%nnodes[j];
 			
 		}
 
 	}
-	printf("Thread %d closing\n", j);
+	printf("Thread closing\n");
 	pthread_exit(NULL);
 }
 
-int toplevelalgorithm (dectree* t, graph* g, int n, int* set){
+int toplevelalgorithm (dectree* t, graph* g, int n, int* set, int z){
 
 	if ((t->right==NULL)||(t->left==NULL)){
 		return 0;
 	}
 
-	nnodes=getnumberofnodes(t)-1;
-	tocompute=0;
-	nodestocompute=(dectree**)malloc(nnodes*sizeof(dectree*));
+	nnodes[z]=getnumberofnodes(t)-1;
+	tocompute[z]=0;
+	nodestocompute[z]=(dectree**)malloc(nnodes[z]*sizeof(dectree*));
 	if (t->right!=NULL)
-		fillThevoid(t->right,g);
+		fillThevoid(t->right,g, z);
 	else
-		return toplevelalgorithm(t->left, g, n, set);
+		return toplevelalgorithm(t->left, g, n, set, z);
 
 	if (t->left!=NULL)
-		fillThevoid(t->left, g);
+		fillThevoid(t->left, g, z);
 	
 	pthread_t* threads = (pthread_t*)malloc(n*sizeof(pthread_t));
 
 	for (int i=0; i<n; i++){
-		if (pthread_create(&threads[i], NULL, threadAlgorithm, &i)){
+		if (pthread_create(&threads[i], NULL, threadAlgorithm, &z)){
 			perror("pthread_create");
 			return 0;
 		}
@@ -888,102 +900,102 @@ int toplevelalgorithm (dectree* t, graph* g, int n, int* set){
 
 	int finished=0;
 	while (finished==0){
-		pthread_mutex_lock(&mut);
-		tocompute = nnodes;
-		for (int i=0; i<nnodes; i++){
-			if (nodestocompute[i]->computed==1)
-				tocompute--;
+		pthread_mutex_lock(&mut[z]);
+		tocompute[z] = nnodes[z];
+		for (int i=0; i<nnodes[z]; i++){
+			if (nodestocompute[z][i]->computed==1)
+				tocompute[z]--;
 		}	
 	//	printf("%d / %d\n\n\n", tocompute, nnodes);
-		if (tocompute<=0)
+		if (tocompute[z]<=0)
 			finished=1;
-		pthread_mutex_unlock(&mut);
+		pthread_mutex_unlock(&mut[z]);
 	}
 	printf("-----------------------------------------------Preparing to close\n");
 	for (int i=0; i<n; i++)
 		pthread_join(threads[i],NULL);
 	//sleep(4);
 	printf("--------------------------------------------------------closing\n");
-
-	for (int i =0; i<nnodes; i++){
+/*
+	for (int i =0; i<nnodes[z]; i++){
 		printf("Data of node %d-----------------------\n",i);
 		printf("a = ");
-		for (int j=0; j<nodestocompute[i]->c.na; j++)
-			printf("%d, ",nodestocompute[i]->c.a[j]);
+		for (int j=0; j<nodestocompute[z][i]->c.na; j++)
+			printf("%d, ",nodestocompute[z][i]->c.a[j]);
 		printf("\n");
 		printf("acomp = ");
-		for (int j=0; j<nodestocompute[i]->c.nacomp; j++)
-			printf("%d, ", nodestocompute[i]->c.acomp[j]);
+		for (int j=0; j<nodestocompute[z][i]->c.nacomp; j++)
+			printf("%d, ", nodestocompute[z][i]->c.acomp[j]);
 		printf("\n");
 		printf("tc = ");
-		for (int j=0; j<nodestocompute[i]->c.nrep; j++)
-			printf("%d, ", nodestocompute[i]->c.tc[j]);
+		for (int j=0; j<nodestocompute[z][i]->c.nrep; j++)
+			printf("%d, ", nodestocompute[z][i]->c.tc[j]);
 		printf("\n");
 		printf("complementtc = ");
-		for (int j=0; j<nodestocompute[i]->c.nrepincomp; j++)
-			printf("%d, ", nodestocompute[i]->c.complementtc[j]);
+		for (int j=0; j<nodestocompute[z][i]->c.nrepincomp; j++)
+			printf("%d, ", nodestocompute[z][i]->c.complementtc[j]);
 		printf("\n");
 		printf("pointtorep = \n");
-		for (int j=0; j<nodestocompute[i]->c.na; j++)
-			printf("%d->%d\n", nodestocompute[i]->c.pointtorep[2*j], nodestocompute[i]->c.pointtorep[2*j+1]);
+		for (int j=0; j<nodestocompute[z][i]->c.na; j++)
+			printf("%d->%d\n", nodestocompute[z][i]->c.pointtorep[2*j], nodestocompute[z][i]->c.pointtorep[2*j+1]);
 		printf("pointtorepincomp = \n");
-		for (int j=0; j<nodestocompute[i]->c.nacomp; j++)
-			printf("%d->%d\n", nodestocompute[i]->c.pointtorepincomp[2*j], nodestocompute[i]->c.pointtorepincomp[2*j+1]);
+		for (int j=0; j<nodestocompute[z][i]->c.nacomp; j++)
+			printf("%d->%d\n", nodestocompute[z][i]->c.pointtorepincomp[2*j], nodestocompute[z][i]->c.pointtorepincomp[2*j+1]);
 		printf("matrixrevisited = \n");
-		for (int j=0; j<nodestocompute[i]->c.na; j++){
-			for (int k=0; k<nodestocompute[i]->c.nacomp; k++)
-				printf("%d ", nodestocompute[i]->c.matrixrevisited[j*nodestocompute[i]->c.nacomp+k]);
+		for (int j=0; j<nodestocompute[z][i]->c.na; j++){
+			for (int k=0; k<nodestocompute[z][i]->c.nacomp; k++)
+				printf("%d ", nodestocompute[z][i]->c.matrixrevisited[j*nodestocompute[z][i]->c.nacomp+k]);
 			printf("\n");
 		}
 		printf("lra = \n");
-		for (int j=0; j<nodestocompute[i]->c.lracard; j++){
-			for (int k=0; k<nodestocompute[i]->c.nrep; k++)
-				printf("%d, ", nodestocompute[i]->c.lra[j*nodestocompute[i]->c.nrep+k]);
+		for (int j=0; j<nodestocompute[z][i]->c.lracard; j++){
+			for (int k=0; k<nodestocompute[z][i]->c.nrep; k++)
+				printf("%d, ", nodestocompute[z][i]->c.lra[j*nodestocompute[z][i]->c.nrep+k]);
 			printf("\n");
 		}
 		printf("lnra = \n");
-		for (int j=0; j<nodestocompute[i]->c.lnracard; j++){
-			for (int k=0; k<nodestocompute[i]->c.nrepincomp; k++)
-				printf("%d, ", nodestocompute[i]->c.lnra[j*nodestocompute[i]->c.nrepincomp+k]);
+		for (int j=0; j<nodestocompute[z][i]->c.lnracard; j++){
+			for (int k=0; k<nodestocompute[z][i]->c.nrepincomp; k++)
+				printf("%d, ", nodestocompute[z][i]->c.lnra[j*nodestocompute[z][i]->c.nrepincomp+k]);
 			printf("\n");
 		}
 		printf("lracomp = \n");
-		for (int j=0; j<nodestocompute[i]->c.lracompcard; j++){
-			for (int k=0; k<nodestocompute[i]->c.nrepincomp;k++)
-				printf("%d, " , nodestocompute[i]->c.lracomp[j*nodestocompute[i]->c.nrepincomp+k]);
+		for (int j=0; j<nodestocompute[z][i]->c.lracompcard; j++){
+			for (int k=0; k<nodestocompute[z][i]->c.nrepincomp;k++)
+				printf("%d, " , nodestocompute[z][i]->c.lracomp[j*nodestocompute[z][i]->c.nrepincomp+k]);
 			printf("\n");
 		}
 		printf("lnracomp = \n");
-		for (int j=0; j<nodestocompute[i]->c.lnracompcard; j++){
-			for (int k=0; k<nodestocompute[i]->c.nrep; k++)
-				printf("%d, ", nodestocompute[i]->c.lnracomp[j*nodestocompute[i]->c.nrep+k]);
+		for (int j=0; j<nodestocompute[z][i]->c.lnracompcard; j++){
+			for (int k=0; k<nodestocompute[z][i]->c.nrep; k++)
+				printf("%d, ", nodestocompute[z][i]->c.lnracomp[j*nodestocompute[z][i]->c.nrep+k]);
 			printf("\n");
 		}
 		printf("m =\n");
-		for (int j=0; j<nodestocompute[i]->c.lracard; j++){
-			for (int k=0; k<nodestocompute[i]->c.nrep; k++)
-				printf("%d ", nodestocompute[i]->c.m[j*nodestocompute[i]->c.nrep+k]);
+		for (int j=0; j<nodestocompute[z][i]->c.lracard; j++){
+			for (int k=0; k<nodestocompute[z][i]->c.nrep; k++)
+				printf("%d ", nodestocompute[z][i]->c.m[j*nodestocompute[z][i]->c.nrep+k]);
 			printf("\n");
 		}
 		printf("mcomp =\n");
-		for (int j=0; j<nodestocompute[i]->c.lracompcard; j++){
-			for (int k=0; k<nodestocompute[i]->c.nrepincomp; k++)
-				printf("%d ", nodestocompute[i]->c.mcomp[j*nodestocompute[i]->c.nrepincomp+k]);
+		for (int j=0; j<nodestocompute[z][i]->c.lracompcard; j++){
+			for (int k=0; k<nodestocompute[z][i]->c.nrepincomp; k++)
+				printf("%d ", nodestocompute[z][i]->c.mcomp[j*nodestocompute[z][i]->c.nrepincomp+k]);
 			printf("\n");
 		}
 		printf("tab =\n");
-		for (int j=0; j<nodestocompute[i]->c.lracard; j++){
-			for (int k=0; k<nodestocompute[i]->c.lracompcard; k++){
-				printf("%d ",nodestocompute[i]->c.tab[j*nodestocompute[i]->c.lracompcard+k]);
+		for (int j=0; j<nodestocompute[z][i]->c.lracard; j++){
+			for (int k=0; k<nodestocompute[z][i]->c.lracompcard; k++){
+				printf("%d ",nodestocompute[z][i]->c.tab[j*nodestocompute[z][i]->c.lracompcard+k]);
 			}
 			printf("\n");
 		}
 
 		printf("box =\n");
-		for (int j=0; j<nodestocompute[i]->c.lracard; j++){
-			for (int k=0; k<nodestocompute[i]->c.lracompcard; k++){
+		for (int j=0; j<nodestocompute[z][i]->c.lracard; j++){
+			for (int k=0; k<nodestocompute[z][i]->c.lracompcard; k++){
 				for (int l=0; l<6; l++){
-					printf("%d, ", nodestocompute[i]->c.box[(j*nodestocompute[i]->c.lracompcard+k)*6+l]);
+					printf("%d, ", nodestocompute[z][i]->c.box[(j*nodestocompute[z][i]->c.lracompcard+k)*6+l]);
 				}
 				printf("   ");
 			}
@@ -991,7 +1003,7 @@ int toplevelalgorithm (dectree* t, graph* g, int n, int* set){
 		}
 		
 	}
-
+*/
 	cutdata *c = (cutdata*)malloc(2*sizeof(cutdata));
 	cutdata c1 = t->left->c;
 	cutdata c2= t->right->c;
@@ -1082,27 +1094,26 @@ int toplevelalgorithm (dectree* t, graph* g, int n, int* set){
 		}
 		
 	}
-	printf("Dominating set of size %d\n", size);
+//	printf("Dominating set of size %d, amax=%d, acmax=%d, bmax=%d, bcmax=%d\n", size, amax, acmax, bmax, bcmax);
 
-	int * sol = (int*)malloc((size)*sizeof(int));
+	
 	int* left = (int*)malloc(c1.tab[amax*c1.lracompcard+acmax]*sizeof(int));
 	int* right= (int*)malloc(c2.tab[bmax*c2.lracompcard+bcmax]*sizeof(int));
 	left = computeDS (t->left, c1.tab[amax*c1.lracompcard+acmax], amax, acmax);
 	right= computeDS (t->right, c2.tab[bmax*c2.lracompcard+bcmax], bmax, bcmax);
 
 	for (int i = 0; i< c1.tab[amax*c1.lracompcard+acmax]; i++)
-		sol[i]=left[i];
+		set[i]=left[i];
 	
 	for (int i = 0; i< c2.tab[bmax*c2.lracompcard+bcmax]; i++)
-		sol[i+c1.tab[amax*c1.lracompcard+acmax]]=right[i];
+		set[i+c1.tab[amax*c1.lracompcard+acmax]]=right[i];
 	
-/*
-	for (int i = 0; i<c2.tab[bmax*c2.lracompcard+bcmax]+c1.tab[amax*c1.lracompcard+acmax];i++)
-		printf("%d, ", sol[i]);
+
+/*	for (int i = 0; i<c2.tab[bmax*c2.lracompcard+bcmax]+c1.tab[amax*c1.lracompcard+acmax];i++)
+		printf("(%d, %d)\n", g->pos[2*set[i]], g->pos[2*set[i]+1]);
 	
 	printf("\n");
 */
-	set=sol;
 	return size;
 }
 
@@ -1318,28 +1329,31 @@ int* computeDS (dectree* t, int much, int aleft, int acleft){
 	return sol;
 }
 
-int getBW (dectree* t, graph* g){
+int getBW (dectree* t, graph* g, int z){
 	int bwmax=-1;
 	if ((t->right==NULL)||(t->left==NULL))
 		bwmax=2;
 	else {
-		t->c = cutThatTree (g, t);
+		int n = getnumberofnodes (t) -1;
+		tocompute[z]=0;
+		int* sizes= (int*)malloc(n*sizeof(int));
+		nodestocompute[z]=(dectree**)malloc(n*sizeof(dectree*));
+		fillThevoid(t->right, g, z);
+		fillThevoid(t->left, g, z);
 
-		firstpreprocess (g,&(t->c));
-		secondpreprocess (&(t->c), g);
+		for (int i=0; i<n; i++){
+			nodestocompute[z][i]->c = cutThatTree (g, nodestocompute[z][i]);
 
-		
-		int p  = getBW(t->left, g);
-		int q  = getBW(t->right, g);
-		
+			firstpreprocess(g, &(nodestocompute[z][i]->c));
+			secondpreprocess(&(nodestocompute[z][i]->c), g);
+			sizes[i]=nodestocompute[z][i]->c.lracard;
 
-		if (p>bwmax)
-			bwmax=p;
-		if (q>bwmax)
-			bwmax=q;
-		if (t->c.lracard>bwmax)
-			bwmax=t->c.lracard;
-
+		}
+		bwmax=sizes[0];
+		for (int i=1; i<n; i++){
+			if (sizes[i]>bwmax)
+				bwmax = sizes[i];
+		}
 	}
 	return bwmax;
 }

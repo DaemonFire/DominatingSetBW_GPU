@@ -16,7 +16,7 @@ pointset incrementalUNheuristic (graph g, int init);
 
 dectree *generateTreeBWstep (graph g, pointset dec, int i);
 
-dectree *generateTreeBW (graph g);
+dectree *generateTreeBW (graph g, int z);
 
 int printTree (dectree t);
 

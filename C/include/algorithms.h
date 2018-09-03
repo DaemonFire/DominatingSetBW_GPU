@@ -2,6 +2,8 @@
 #define _ALGORITHMS_
 #include "../include/datarepresentation.h"
 
+int inital (int ncomp);
+
 __global__
 void computeTwins (int* mat, int* width, int* result);
 
@@ -25,12 +27,12 @@ int secondpreprocess (cutdata* c, graph* g);
 
 int thirdpreprocess (cutdata* c, graph* g);
 
-int toplevelalgorithm (dectree* t, graph* g, int n, int* set);
+int toplevelalgorithm (dectree* t, graph* g, int n, int* set, int i);
 
 int stepalgorithm (dectree* t, graph* g);
 
 int* computeDS (dectree* t, int much, int aleft, int acleft);
 
-int getBW (dectree* t, graph* g);
+int getBW (dectree* t, graph* g, int z);
 
 #endif

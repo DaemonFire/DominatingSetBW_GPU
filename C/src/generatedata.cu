@@ -66,14 +66,20 @@ int computeconnexcomposants (graph* g, graph** components, int threshold){
 					computed[j]=computed[i];
 				}
 				else{
-					if (computed[j]>=computed[i])
+					if (computed[j]>=computed[i]){
+						int previous=computed[j];
 						computed[j]=computed[i];
-					else{
-						int previous = computed[i];
-						int new = computed[j];
 						for (int k=0; k<g->size; k++){
 							if (computed[k]==previous)
-								computed[k]=new;
+								computed[k]=computed[i];
+						}
+					}
+					else{
+						int previous = computed[i];
+						int a = computed[j];
+						for (int k=0; k<g->size; k++){
+							if (computed[k]==previous)
+								computed[k]=a;
 						}
 					}
 				}
@@ -191,9 +197,8 @@ graph loadgraph (char* path, int threshold) {
 		fgets(buffer,80,f);
 		int a = atoi(subtoken=strtok(buffer," "));
 		int b = atoi(subtoken=strtok(NULL," "));
-		g.pos[3*i]=i;
-		g.pos[3*i+1]=a;
-		g.pos[3*i+2]=b;
+		g.pos[2*i]=a;
+		g.pos[2*i+1]=b;
 	}
 	fclose(f);
 	generateEdges(g,threshold);
@@ -205,7 +210,7 @@ void generateEdges (graph g, int threshold){
 
 	for (int i = 0; i<g.size; i++) {
 		for (int j= 0; j<i; j++) {
-			if ((g.pos[3*i+1]-g.pos[3*j+1])*(g.pos[3*i+1]-g.pos[3*j+1])+(g.pos[3*i+2]-g.pos[3*j+2])*(g.pos[3*i+2]-g.pos[3*j+2])<=(threshold*threshold)){
+			if ((g.pos[2*i]-g.pos[2*j])*(g.pos[2*i]-g.pos[2*j])+(g.pos[2*i+1]-g.pos[2*j+1])*(g.pos[2*i+1]-g.pos[2*j+1])<=(threshold*threshold)){
 				g.matrix[g.size*i+j]=1;
 				g.matrix[g.size*j+i]=1;
 			}

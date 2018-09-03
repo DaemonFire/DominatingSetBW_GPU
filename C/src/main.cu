@@ -32,25 +32,32 @@ int main (int argc, char** argv){
 	//dectree *t = generateTree(p,g,0);
 	graph** components = (graph**)malloc(g->size*sizeof(graph*));
 	int ncomp = computeconnexcomposants (g, components, threshold);
+	inital(ncomp);
 	struct timeval stop, start;
 	gettimeofday(&start, NULL);
 	for (int i=0; i<ncomp; i++){
-		dectree *t=generateTreeBW (*components[i]);
-		pointset x;
+	//	for (int j=0; j< components[i]->size; j++)
+	//		printf("(%d, %d)\n",components[i]->pos[2*j], components[i]->pos[2*j+1]);
+		dectree *t=generateTreeBW (*components[i], i);
+		int* x=(int*)malloc(components[i]->size*sizeof(int));
+		int nx=0;
 		if (components[i]->size>0){
-			x = toplevelalgorithm (t, components[i], components[i]->size);
+			nx = toplevelalgorithm (t, components[i], components[i]->size, x, i);
 		}	
 		else
-			x.size=0;
+			nx=0;
 	
-		if (x.size<0)
-			x.size=0;
+		if (nx<0)
+			nx=0;
 		
-		for (int j=0; j<x.size; j++)
-			sol[size+j]=x.members[j];
-		size+=x.size;
-		components[i]->sizeset=x.size;
-		components[i]->domset=x.members;
+		for (int j=0; j<nx; j++)
+			sol[size+j]=x[j];
+	/*	for (int j=0; j<nx; j++)
+			printf("%d, ", x[j]);
+		printf("\n");*/
+		size+=nx;
+		components[i]->sizeset=nx;
+		components[i]->domset=x;
 	}
 	for (int i=0; i<sizeinit; i++){
 		printf("(%d, %d),  ", h->pos[2*sol[i]], h->pos[2*sol[i]+1]);
@@ -59,7 +66,7 @@ int main (int argc, char** argv){
 	int cursor =sizeinit;
 	for (int i=0; i<ncomp; i++){
 		for (int j=0; j<components[i]->sizeset; j++){
-			printf("(%d, %d), ", components[i]->pos[2*components[i]->domset[j]], components[i]->pos[2*components[i]->domset[j]+1]);
+			printf("(%d, %d), ", components[i]->pos[2*sol[cursor+j]], components[i]->pos[2*sol[cursor+j]+1]);
 		}
 		cursor+=components[i]->sizeset;
 		printf("|");
