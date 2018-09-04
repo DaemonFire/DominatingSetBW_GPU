@@ -18,6 +18,8 @@ dectree *generateTreeBWstep (graph g, pointset dec, int i);
 
 dectree *generateTreeBW (graph g, int z);
 
+dectree *generateTreeBWcrude (graph g, int i);
+
 int printTree (dectree t);
 
 #endif

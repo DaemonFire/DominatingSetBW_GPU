@@ -428,7 +428,9 @@ dectree *generateTreeBW (graph g, int z){
 		t[i]->right=tright;
 		t[i]->label=-1;
 		bw[i]=getBW(t[i]->left, &g, z);
-		bw[i]+=getBW(t[i]->right, &g, z);
+		int previous =getBW(t[i]->right, &g, z);
+		if (previous>bw[i])
+			bw[i]=previous;
 	} 
 
 	int size=bw[0];
@@ -440,10 +442,28 @@ dectree *generateTreeBW (graph g, int z){
 			min=i;
 		}
 	}
-	printf("Boolean width=%d\n",size);
+	printf("Rank width=%d\n",size);
 	return t[min];
 }
 
+dectree *generateTreeBWcrude (graph g, int i){
+	pointset dec;
+	if (g.size >1)
+		dec=incrementalUNheuristic (g,i);
+	else
+		dec=incrementalUNheuristic (g,i-1);
+	dectree* t = (dectree*)malloc(sizeof(dectree));
+	dectree* tleft=(dectree*)malloc(sizeof(dectree));
+	dectree *tright= (dectree*)malloc(sizeof(dectree));
+	tright->label=dec.members[dec.size-1];
+	tright->left=NULL;
+	tright->right=NULL;
+	tleft=generateTreeBWstep (g, dec, 1);
+	t->left = tleft;
+	t->right=tright;
+	t->label = -1;
+	return t;
+}
 
 int printTree (dectree t){
 	printf("Un arbre");
